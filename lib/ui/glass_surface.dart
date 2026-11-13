@@ -83,10 +83,7 @@ class GlassSurface extends StatelessWidget {
                   ],
                 ),
               ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: fill, borderRadius: shape),
-                child: Padding(padding: padding, child: child),
-              ),
+              child: Padding(padding: padding, child: child),
             ),
           ),
         ),

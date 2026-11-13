@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -34,15 +36,17 @@ class GlassTabs extends StatelessWidget {
     }
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(24.dp, 0, 24.dp, bottom + 14.dp),
+      padding: EdgeInsets.fromLTRB(24.dp, 0, 24.dp, math.max(bottom + 14.dp, 24.dp)),
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: GlassSurface(
-          radius: height / 2,
-          thick: true,
-          padding: EdgeInsets.all(5.dp),
-          child: SizedBox(
-            height: height - 10.dp,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 440.dp),
+          child: GlassSurface(
+            radius: height / 2,
+            thick: true,
+            padding: EdgeInsets.all(5.dp),
+            child: SizedBox(
+              height: height - 10.dp,
             child: LayoutBuilder(builder: (context, c) {
               final w = c.maxWidth / items.length;
               return Stack(children: [

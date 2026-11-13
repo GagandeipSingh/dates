@@ -73,36 +73,41 @@ class TodayTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Pal.of(context);
     final now = DateTime.now();
-    return ListView(
-      padding: pagePadding(context, tabBar: true),
-      children: [
-        Pane(
-          tint: p.accent.withValues(alpha: 0.035),
-          padding: EdgeInsets.fromLTRB(22.dp, 20.dp, 22.dp, 22.dp),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Caption(DateFormat('EEEE').format(now), color: p.accent),
-            SizedBox(height: 4.dp),
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('${now.day}',
-                  style: TextStyle(
-                      color: p.ink, fontSize: 76.sp, height: 1, fontWeight: FontWeight.w300, letterSpacing: -3)),
-              SizedBox(width: 12.dp),
-              Padding(
-                padding: EdgeInsets.only(bottom: 8.dp),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(DateFormat('MMMM').format(now),
-                      style: TextStyle(color: p.ink, fontSize: 22.sp, fontWeight: FontWeight.w600)),
-                  Text('${now.year}', style: TextStyle(color: p.sub, fontSize: 16.sp)),
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 640.dp),
+        child: ListView(
+          padding: pagePadding(context, tabBar: true),
+          children: [
+            Pane(
+              tint: p.accent.withValues(alpha: 0.035),
+              padding: EdgeInsets.fromLTRB(22.dp, 20.dp, 22.dp, 22.dp),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Caption(DateFormat('EEEE').format(now), color: p.accent),
+                SizedBox(height: 4.dp),
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('${now.day}',
+                      style: TextStyle(
+                          color: p.ink, fontSize: 76.sp, height: 1, fontWeight: FontWeight.w300, letterSpacing: -3)),
+                  SizedBox(width: 12.dp),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 8.dp),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(DateFormat('MMMM').format(now),
+                          style: TextStyle(color: p.ink, fontSize: 22.sp, fontWeight: FontWeight.w600)),
+                      Text('${now.year}', style: TextStyle(color: p.sub, fontSize: 16.sp)),
+                    ]),
+                  ),
                 ]),
-              ),
-            ]),
-          ]),
+              ]),
+            ),
+            Gap(12.dp),
+            YearGlance(date: now),
+            const SectionTitle('Quick tools'),
+            const _ToolList(limit: 3),
+          ],
         ),
-        Gap(12.dp),
-        YearGlance(date: now),
-        const SectionTitle('Quick tools'),
-        const _ToolList(limit: 3),
-      ],
+      ),
     );
   }
 }
@@ -138,9 +143,14 @@ final _tools = <_Tool>[
 class ToolsTab extends StatelessWidget {
   const ToolsTab({super.key});
   @override
-  Widget build(BuildContext context) => ListView(
-        padding: pagePadding(context, tabBar: true),
-        children: const [_ToolList()],
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 640.dp),
+          child: ListView(
+            padding: pagePadding(context, tabBar: true),
+            children: const [_ToolList()],
+          ),
+        ),
       );
 }
 
@@ -248,9 +258,12 @@ class SettingsTab extends StatelessWidget {
     final s = SettingsScope.of(context);
     final p = Pal.of(context);
     final sample = DateTime(DateTime.now().year, 7, 17);
-    return ListView(
-      padding: pagePadding(context, tabBar: true),
-      children: [
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 640.dp),
+        child: ListView(
+          padding: pagePadding(context, tabBar: true),
+          children: [
         const SectionTitle('Appearance'),
         Segments<Appearance>(
           values: Appearance.values,
@@ -355,7 +368,8 @@ class SettingsTab extends StatelessWidget {
           child: Text('Dates · ${dayOfYear(DateTime.now())} days into ${DateTime.now().year}',
               style: TextStyle(color: p.sub, fontSize: 12.sp)),
         ),
-      ],
+        ),
+      ),
     );
   }
 }

@@ -98,9 +98,14 @@ class ToolScreen extends StatelessWidget {
       ),
       body: Listener(
         onPointerDown: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-        child: ListView(
-          padding: pagePadding(context),
-          children: children,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 640.dp),
+            child: ListView(
+              padding: pagePadding(context),
+              children: children,
+            ),
+          ),
         ),
       ),
     );
