@@ -1,0 +1,70 @@
+name: dates
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  cupertino_icons: ^1.0.9
+  flutter:
+    sdk: flutter
+  flutter_screenutil: ^5.9.3
+  intl: ^0.20.3
+  liquid_glass_widgets: ^1.16.1
+  share_plus: ^13.3.1
+  shared_preferences: ^2.5.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.7
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-ExtraLight.ttf
+          weight: 200
+        - asset: assets/fonts/Inter-Light.ttf
+          weight: 300
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  remove_alpha_ios: true
+  adaptive_icon_background: "assets/icon/bg.png"
+  adaptive_icon_foreground: "assets/icon/fg.png"
+  adaptive_icon_monochrome: "assets/icon/mono.png"
+  adaptive_icon_foreground_inset: 0
+
+flutter_native_splash:
+  # Icon-free, as in the compass app: the "images" are solid squares in the
+  # splash colour, so Android 12+ draws no app icon. The colours sit inside
+  # the sky the app opens on, so the hand-off is seamless.
+  color: "#EEF1F8"
+  color_dark: "#060A18"
+  image: assets/splash_light.png
+  image_dark: assets/splash_dark.png
+  android_12:
+    image: assets/splash_light.png
+    image_dark: assets/splash_dark.png
+    icon_background_color: "#EEF1F8"
+    icon_background_color_dark: "#060A18"
+  android: true
+  ios: true
