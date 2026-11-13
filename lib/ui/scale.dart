@@ -26,7 +26,10 @@ class ScaleToWidth extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final f = (mq.size.width / designWidth).clamp(0.8, 1.3);
+    // The SHORTER side, never the width: in landscape the width is the long
+    // side, and scaling by it zoomed the whole UI up to the 1.3 clamp. The
+    // short side is the same in both orientations, so rotating keeps sizes.
+    final f = (mq.size.shortestSide / designWidth).clamp(0.8, 1.3);
     if ((f - 1).abs() < 0.01) return child;
     final size = mq.size / f;
     return SizedBox.expand(

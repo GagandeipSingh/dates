@@ -43,9 +43,6 @@ const _glass = GlassThemeData(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Portrait only. The manifest and Info.plist say the same, so the first
-  // frame never draws sideways before this runs.
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   await LiquidGlassWidgets.initialize(enablePerformanceMonitor: false);
   final settings = await Settings.load();

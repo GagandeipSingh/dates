@@ -73,39 +73,70 @@ class TodayTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Pal.of(context);
     final now = DateTime.now();
+    final isWide = MediaQuery.sizeOf(context).width >= 720.dp;
+
+    final heroCard = Pane(
+      tint: p.accent.withValues(alpha: 0.035),
+      padding: EdgeInsets.fromLTRB(22.dp, 20.dp, 22.dp, 22.dp),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Caption(DateFormat('EEEE').format(now), color: p.accent),
+        SizedBox(height: 4.dp),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('${now.day}',
+              style: TextStyle(
+                  color: p.ink, fontSize: 76.sp, height: 1, fontWeight: FontWeight.w300, letterSpacing: -3)),
+          SizedBox(width: 12.dp),
+          Padding(
+            padding: EdgeInsets.only(bottom: 8.dp),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(DateFormat('MMMM').format(now),
+                  style: TextStyle(color: p.ink, fontSize: 22.sp, fontWeight: FontWeight.w600)),
+              Text('${now.year}', style: TextStyle(color: p.sub, fontSize: 16.sp)),
+            ]),
+          ),
+        ]),
+      ]),
+    );
+
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 640.dp),
+        constraints: BoxConstraints(maxWidth: isWide ? 960.dp : 640.dp),
         child: ListView(
           padding: pagePadding(context, tabBar: true),
-          children: [
-            Pane(
-              tint: p.accent.withValues(alpha: 0.035),
-              padding: EdgeInsets.fromLTRB(22.dp, 20.dp, 22.dp, 22.dp),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Caption(DateFormat('EEEE').format(now), color: p.accent),
-                SizedBox(height: 4.dp),
-                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('${now.day}',
-                      style: TextStyle(
-                          color: p.ink, fontSize: 76.sp, height: 1, fontWeight: FontWeight.w300, letterSpacing: -3)),
-                  SizedBox(width: 12.dp),
-                  Padding(
-                    padding: EdgeInsets.only(bottom: 8.dp),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(DateFormat('MMMM').format(now),
-                          style: TextStyle(color: p.ink, fontSize: 22.sp, fontWeight: FontWeight.w600)),
-                      Text('${now.year}', style: TextStyle(color: p.sub, fontSize: 16.sp)),
-                    ]),
+          children: isWide
+              ? [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            heroCard,
+                            Gap(12.dp),
+                            YearGlance(date: now),
+                          ],
+                        ),
+                      ),
+                      Gap(20.dp),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: const [
+                            SectionTitle('Quick tools'),
+                            _ToolList(limit: 3),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ]),
-              ]),
-            ),
-            Gap(12.dp),
-            YearGlance(date: now),
-            const SectionTitle('Quick tools'),
-            const _ToolList(limit: 3),
-          ],
+                ]
+              : [
+                  heroCard,
+                  Gap(12.dp),
+                  YearGlance(date: now),
+                  const SectionTitle('Quick tools'),
+                  const _ToolList(limit: 3),
+                ],
         ),
       ),
     );
@@ -143,15 +174,18 @@ final _tools = <_Tool>[
 class ToolsTab extends StatelessWidget {
   const ToolsTab({super.key});
   @override
-  Widget build(BuildContext context) => Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 640.dp),
-          child: ListView(
-            padding: pagePadding(context, tabBar: true),
-            children: const [_ToolList()],
-          ),
+  Widget build(BuildContext context) {
+    final isWide = MediaQuery.sizeOf(context).width >= 720.dp;
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: isWide ? 960.dp : 640.dp),
+        child: ListView(
+          padding: pagePadding(context, tabBar: true),
+          children: const [_ToolList()],
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _ToolList extends StatelessWidget {
@@ -162,6 +196,26 @@ class _ToolList extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Pal.of(context);
     final list = limit == null ? _tools : _tools.take(limit!).toList();
+    final isWide = MediaQuery.sizeOf(context).width >= 720.dp && limit == null;
+
+    if (isWide) {
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 460.dp,
+          mainAxisSpacing: 12.dp,
+          crossAxisSpacing: 12.dp,
+          mainAxisExtent: 88.dp,
+        ),
+        itemCount: list.length,
+        itemBuilder: (context, i) => Pane(
+          padding: EdgeInsets.zero,
+          child: _ToolRow(tool: list[i]),
+        ),
+      );
+    }
+
     return Pane(
       padding: EdgeInsets.symmetric(vertical: 6.dp),
       child: Column(children: [
@@ -258,119 +312,141 @@ class SettingsTab extends StatelessWidget {
     final s = SettingsScope.of(context);
     final p = Pal.of(context);
     final sample = DateTime(DateTime.now().year, 7, 17);
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 640.dp),
-        child: ListView(
-          padding: pagePadding(context, tabBar: true),
-          children: [
-        const SectionTitle('Appearance'),
-        Segments<Appearance>(
-          values: Appearance.values,
-          labels: const ['System', 'Light', 'Dark'],
-          selected: s.appearance,
-          onChanged: (v) => s.appearance = v,
-        ),
-        Gap(12.dp),
-        Pane(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Caption('Colour'),
-              const Spacer(),
-              Text(s.accent.name, style: TextStyle(color: p.accent, fontSize: 13.sp, fontWeight: FontWeight.w600)),
-            ]),
-            SizedBox(height: 14.dp),
-            Wrap(spacing: 12.dp, runSpacing: 12.dp, children: [
-              for (var i = 0; i < accents.length; i++)
-                Semantics(
-                  button: true,
-                  selected: i == s.accentIndex,
-                  label: accents[i].name,
-                  excludeSemantics: true,
-                  child: GestureDetector(
-                    onTap: () => s.accentIndex = i,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      width: 40.dp,
-                      height: 40.dp,
-                      padding: EdgeInsets.all(3.dp),
+    final isWide = MediaQuery.sizeOf(context).width >= 720.dp;
+
+    final lookColumn = [
+      const SectionTitle('Appearance'),
+      Segments<Appearance>(
+        values: Appearance.values,
+        labels: const ['System', 'Light', 'Dark'],
+        selected: s.appearance,
+        onChanged: (v) => s.appearance = v,
+      ),
+      Gap(12.dp),
+      Pane(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Caption('Colour'),
+            const Spacer(),
+            Text(s.accent.name, style: TextStyle(color: p.accent, fontSize: 13.sp, fontWeight: FontWeight.w600)),
+          ]),
+          SizedBox(height: 14.dp),
+          Wrap(spacing: 12.dp, runSpacing: 12.dp, children: [
+            for (var i = 0; i < accents.length; i++)
+              Semantics(
+                button: true,
+                selected: i == s.accentIndex,
+                label: accents[i].name,
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: () => s.accentIndex = i,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    width: 40.dp,
+                    height: 40.dp,
+                    padding: EdgeInsets.all(3.dp),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: i == s.accentIndex ? accents[i].color : Colors.transparent, width: 2.2.dp),
+                    ),
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(
-                            color: i == s.accentIndex ? accents[i].color : Colors.transparent, width: 2.2.dp),
-                      ),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [accents[i].light[1], accents[i].color],
-                          ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [accents[i].light[1], accents[i].color],
                         ),
                       ),
                     ),
                   ),
                 ),
-            ]),
-          ]),
-        ),
-        const SectionTitle('Date format'),
-        Pane(
-          padding: EdgeInsets.fromLTRB(18.dp, 6.dp, 18.dp, 6.dp),
-          child: Column(children: [
-            for (final f in dateFormats)
-              Semantics(
-                button: true,
-                selected: f == s.dateFormat,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => s.dateFormat = f,
-                  child: SizedBox(
-                    height: 48.dp,
-                    child: Row(children: [
-                      Expanded(
-                        child: Text(DateFormat(f).format(sample),
-                            style: TextStyle(color: p.ink, fontSize: 15.5.sp)),
-                      ),
-                      if (f == s.dateFormat) Icon(CupertinoIcons.checkmark_alt, color: p.accent, size: 20.dp),
-                    ]),
-                  ),
-                ),
               ),
           ]),
-        ),
-        const SectionTitle('Preferences'),
-        Pane(
-          child: Column(children: [
-            SwitchRow(
-                label: '24-hour time',
-                hint: s.time(DateTime(2026, 1, 1, 17, 30)),
-                value: s.use24h,
-                onChanged: (v) => s.use24h = v),
-            const Hairline(),
-            SwitchRow(
-                label: 'Week starts on Monday',
-                hint: s.mondayFirst ? 'ISO week numbers' : 'Sunday first, US week numbers',
-                value: s.mondayFirst,
-                onChanged: (v) => s.mondayFirst = v),
-            const Hairline(),
-            SwitchRow(
-                label: 'Share button',
-                hint: 'Show Share under results',
-                value: s.showShare,
-                onChanged: (v) => s.showShare = v),
-          ]),
-        ),
-        Gap(24.dp),
-        Center(
-          child: Text('Dates · ${dayOfYear(DateTime.now())} days into ${DateTime.now().year}',
-              style: TextStyle(color: p.sub, fontSize: 12.sp)),
-        ),
-        ],
+        ]),
       ),
-    ),
-  );
+    ];
+
+    final preferencesColumn = [
+      const SectionTitle('Date format'),
+      Pane(
+        padding: EdgeInsets.fromLTRB(18.dp, 6.dp, 18.dp, 6.dp),
+        child: Column(children: [
+          for (final f in dateFormats)
+            Semantics(
+              button: true,
+              selected: f == s.dateFormat,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => s.dateFormat = f,
+                child: SizedBox(
+                  height: 48.dp,
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(DateFormat(f).format(sample),
+                          style: TextStyle(color: p.ink, fontSize: 15.5.sp)),
+                    ),
+                    if (f == s.dateFormat) Icon(CupertinoIcons.checkmark_alt, color: p.accent, size: 20.dp),
+                  ]),
+                ),
+              ),
+            ),
+        ]),
+      ),
+      const SectionTitle('Preferences'),
+      Pane(
+        child: Column(children: [
+          SwitchRow(
+              label: '24-hour time',
+              hint: s.time(DateTime(2026, 1, 1, 17, 30)),
+              value: s.use24h,
+              onChanged: (v) => s.use24h = v),
+          const Hairline(),
+          SwitchRow(
+              label: 'Week starts on Monday',
+              hint: s.mondayFirst ? 'ISO week numbers' : 'Sunday first, US week numbers',
+              value: s.mondayFirst,
+              onChanged: (v) => s.mondayFirst = v),
+          const Hairline(),
+          SwitchRow(
+              label: 'Share button',
+              hint: 'Show Share under results',
+              value: s.showShare,
+              onChanged: (v) => s.showShare = v),
+        ]),
+      ),
+    ];
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: isWide ? 960.dp : 640.dp),
+        child: ListView(
+          padding: pagePadding(context, tabBar: true),
+          children: [
+            if (isWide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: lookColumn)),
+                  Gap(20.dp),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: preferencesColumn)),
+                ],
+              )
+            else ...[
+              ...lookColumn,
+              ...preferencesColumn,
+            ],
+            Gap(24.dp),
+            Center(
+              child: Text('Dates · ${dayOfYear(DateTime.now())} days into ${DateTime.now().year}',
+                  style: TextStyle(color: p.sub, fontSize: 12.sp)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 }
