@@ -368,8 +368,9 @@ class SettingsTab extends StatelessWidget {
           child: Text('Dates · ${dayOfYear(DateTime.now())} days into ${DateTime.now().year}',
               style: TextStyle(color: p.sub, fontSize: 12.sp)),
         ),
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

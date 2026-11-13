@@ -107,6 +107,7 @@ class GlassTabs extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
