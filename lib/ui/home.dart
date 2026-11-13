@@ -449,4 +449,3 @@ class SettingsTab extends StatelessWidget {
     );
   }
 }
-}
