@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
@@ -22,6 +24,7 @@ class ScaleToWidth extends StatelessWidget {
   final Widget child;
 
   static const designWidth = 418.0;
+  static const designHeight = 860.0;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +32,20 @@ class ScaleToWidth extends StatelessWidget {
     // The SHORTER side, never the width: in landscape the width is the long
     // side, and scaling by it zoomed the whole UI up to the 1.3 clamp. The
     // short side is the same in both orientations, so rotating keeps sizes.
-    final f = (mq.size.shortestSide / designWidth).clamp(0.8, 1.3);
+    //
+    // The LONGER side bounds it too: the design is a tall phone (418 x ~860),
+    // and a nearly square unfolded foldable zoomed by its short side alone
+    // (1.3x) left the controls huge and the content cramped.
+    //
+    // The cap grows with the screen: up to ~1280 wide (tablets, a desktop
+    // window) it stays 1.15x (1.3x looked oversized in a tablet window), a 1920-wide desktop gets ~1.6x so it is not
+    // left small in the middle of empty space.
+    final f = math
+        .min(
+          mq.size.shortestSide / designWidth,
+          mq.size.longestSide / designHeight,
+        )
+        .clamp(0.8, (mq.size.longestSide / 1200).clamp(1.15, 2.0));
     if ((f - 1).abs() < 0.01) return child;
     final size = mq.size / f;
     return SizedBox.expand(
@@ -88,9 +104,15 @@ class _ScreenUtilScopeState extends State<ScreenUtilScope> {
       final first = _configured == null;
       ScreenUtil.configure(
         data: mq,
-        designSize: Size(ScaleToWidth.designWidth, mq.size.height),
+        // The design's SHORT side is designWidth in either orientation, the
+        // same axis ScaleToWidth scales by. splitScreenMode stays OFF: it
+        // treats any height under 700 as 700, and a landscape phone's short
+        // height (~420) then scaled every .dp/.sp up about 1.7x.
+        designSize: mq.size.width > mq.size.height
+            ? Size(mq.size.width, ScaleToWidth.designWidth)
+            : Size(ScaleToWidth.designWidth, mq.size.height),
         minTextAdapt: true,
-        splitScreenMode: true,
+        splitScreenMode: false,
       );
       _configured = mq.size;
       if (!first) {
@@ -100,6 +122,7 @@ class _ScreenUtilScopeState extends State<ScreenUtilScope> {
             e.markNeedsBuild();
             e.visitChildren(rebuild);
           }
+
           (context as Element).visitChildren(rebuild);
         });
       }

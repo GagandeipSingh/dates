@@ -26,7 +26,6 @@ class GlassTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Pal.of(context);
-    final still = MediaQuery.disableAnimationsOf(context);
     final bottom = MediaQuery.paddingOf(context).bottom;
     final height = 64.dp;
     void select(int i) {
@@ -36,7 +35,12 @@ class GlassTabs extends StatelessWidget {
     }
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(24.dp, 0, 24.dp, math.max(bottom + 14.dp, 24.dp)),
+      padding: EdgeInsets.fromLTRB(
+        24.dp,
+        0,
+        24.dp,
+        math.max(bottom + 14.dp, 24.dp),
+      ),
       child: Align(
         alignment: Alignment.bottomCenter,
         child: ConstrainedBox(
@@ -47,67 +51,83 @@ class GlassTabs extends StatelessWidget {
             padding: EdgeInsets.all(5.dp),
             child: SizedBox(
               height: height - 10.dp,
-            child: LayoutBuilder(builder: (context, c) {
-              final w = c.maxWidth / items.length;
-              return Stack(children: [
-                // The selection pill.
-                AnimatedPositioned(
-                  duration: Duration(milliseconds: still ? 0 : 340),
-                  curve: Curves.easeOutCubic,
-                  left: w * selected,
-                  top: 0,
-                  bottom: 0,
-                  width: w,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      color: p.dark
-                          ? Colors.white.withValues(alpha: 0.14)
-                          : Colors.white.withValues(alpha: 0.75),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: p.dark ? 0.18 : 0.9), width: 0.8),
-                      boxShadow: p.dark
-                          ? null
-                          : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10)],
-                    ),
-                  ),
-                ),
-                Row(children: [
-                  for (var i = 0; i < items.length; i++)
-                    Expanded(
-                      child: Semantics(
-                        button: true,
-                        selected: i == selected,
-                        label: items[i].$2,
-                        excludeSemantics: true,
-                        onTap: () => select(i),
-                        // Switches on touch DOWN, as an iOS tab bar does. A
-                        // tap recognizer waits for the release and drops the
-                        // press if the finger drifts, so a tab sometimes
-                        // needed a second press.
-                        child: Listener(
-                          behavior: HitTestBehavior.opaque,
-                          onPointerDown: (_) => select(i),
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(items[i].$1,
-                                size: 22.dp, color: i == selected ? p.accent : p.sub),
-                            SizedBox(height: 2.dp),
-                            Text(items[i].$2,
-                                style: TextStyle(
-                                    fontSize: 11.sp,
-                                    fontWeight: i == selected ? FontWeight.w700 : FontWeight.w500,
-                                    color: i == selected ? p.accent : p.sub)),
-                          ]),
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  final w = c.maxWidth / items.length;
+                  return Stack(
+                    children: [
+                      // The selection pill, on a spring that keeps its speed if
+                      // another tab is chosen mid-flight.
+                      SpringValue(
+                        value: selected.toDouble(),
+                        builder: (context, at, child) => Positioned(
+                          left: w * at,
+                          top: 0,
+                          bottom: 0,
+                          width: w,
+                          child: child!,
                         ),
+                        child: SelectionPill(dark: p.dark),
                       ),
-                    ),
-                ]),
-              ]);
-            }),
+                      Row(
+                        children: [
+                          for (var i = 0; i < items.length; i++)
+                            Expanded(
+                              child: Semantics(
+                                button: true,
+                                selected: i == selected,
+                                label: items[i].$2,
+                                excludeSemantics: true,
+                                onTap: () => select(i),
+                                // Switches on touch DOWN, as an iOS tab bar does. A
+                                // tap recognizer waits for the release and drops the
+                                // press if the finger drifts, so a tab sometimes
+                                // needed a second press.
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: Listener(
+                                    behavior: HitTestBehavior.opaque,
+                                    onPointerDown: (_) => select(i),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          items[i].$1,
+                                          size: 22.dp,
+                                          color: i == selected
+                                              ? p.accent
+                                              : p.sub,
+                                        ),
+                                        SizedBox(height: 2.dp),
+                                        Text(
+                                          items[i].$2,
+                                          style: TextStyle(
+                                            fontSize: 11.sp,
+                                            fontWeight: i == selected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: i == selected
+                                                ? p.accent
+                                                : p.sub,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

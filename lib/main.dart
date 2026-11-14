@@ -1,58 +1,40 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'state/settings.dart';
+import 'ui/glass_surface.dart' show GlassLens;
 import 'ui/home.dart';
 import 'ui/scale.dart';
-
-/// Clear iOS 26-style glass for the chrome (bars, tab bar, switches): a light
-/// tint so the gradient shows through, real refraction, a touch of colour
-/// fringing at the edge. The iOS 27 preset is ~53% white with heavy frost,
-/// which read as a white bar rather than glass.
-const _glass = GlassThemeData(
-  light: GlassThemeVariant(
-    settings: GlassThemeSettings(
-      thickness: 26,
-      blur: 2.5,
-      glassColor: Color.fromRGBO(255, 255, 255, 0.10),
-      lightAngle: 2.356,
-      lightIntensity: 0.95,
-      ambientStrength: 0.12,
-      refractiveIndex: 1.28,
-      saturation: 1.45,
-      chromaticAberration: 0.025,
-    ),
-    quality: GlassQuality.premium,
-  ),
-  dark: GlassThemeVariant(
-    settings: GlassThemeSettings(
-      thickness: 24,
-      blur: 2.5,
-      glassColor: Color.fromRGBO(255, 255, 255, 0.07),
-      lightAngle: 2.356,
-      lightIntensity: 0.8,
-      refractiveIndex: 1.28,
-      saturation: 1.4,
-      chromaticAberration: 0.02,
-    ),
-    quality: GlassQuality.premium,
-  ),
-);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  await LiquidGlassWidgets.initialize(enablePerformanceMonitor: false);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarContrastEnforced: false,
+    ),
+  );
+  // Phones stay portrait. Tablets, unfolded foldables and desktops
+  // (shortest side >= 600 dp) turn freely.
+  final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+  final isLargeScreen =
+      view != null &&
+      view.physicalSize.shortestSide > 0 &&
+      (view.physicalSize.shortestSide / view.devicePixelRatio) >= 600;
+  if (!isLargeScreen) {
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
+  // The liquid glass lens; without it (no Impeller) glass is frost only.
+  await GlassLens.load();
   final settings = await Settings.load();
-  runApp(LiquidGlassWidgets.wrap(
-    brightnessResolver: Theme.maybeBrightnessOf,
-    // No adaptive quality: it drops glass to a flat frosted fallback while a
-    // list scrolls, which is the "turns white, comes back later" effect.
-    theme: _glass,
-    child: SettingsScope(settings: settings, child: const DatesApp()),
-  ));
+  runApp(SettingsScope(settings: settings, child: const DatesApp()));
 }
 
 class DatesApp extends StatelessWidget {
@@ -62,19 +44,32 @@ class DatesApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = SettingsScope.of(context);
     ThemeData theme(Brightness b) => ThemeData(
-          brightness: b,
-          fontFamily: 'Inter',
-          colorSchemeSeed: s.accent.color,
-          useMaterial3: true,
-          splashFactory: NoSplash.splashFactory,
-          // The glass widgets draw Cupertino text; give it Inter too.
-          cupertinoOverrideTheme: const CupertinoThemeData(
-            textTheme: CupertinoTextThemeData(textStyle: TextStyle(fontFamily: 'Inter')),
-          ),
-        );
+      brightness: b,
+      fontFamily: 'Inter',
+      colorSchemeSeed: s.accent.color,
+      useMaterial3: true,
+      splashFactory: NoSplash.splashFactory,
+      // Screens slide in from the right and can be swiped back, as on
+      // iOS, on every platform.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+        },
+      ),
+      cupertinoOverrideTheme: const CupertinoThemeData(
+        textTheme: CupertinoTextThemeData(
+          textStyle: TextStyle(fontFamily: 'Inter'),
+        ),
+      ),
+    );
     return MaterialApp(
       title: 'Dates',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const _StillScroll(),
       theme: theme(Brightness.light),
       darkTheme: theme(Brightness.dark),
       themeMode: switch (s.appearance) {
@@ -82,17 +77,65 @@ class DatesApp extends StatelessWidget {
         Appearance.light => ThemeMode.light,
         Appearance.dark => ThemeMode.dark,
       },
-      // 1. Scale the whole tree to the design width, as the compass app does.
-      // 2. screenutil inside it, designed for the same screen, so .sp/.dp
+      // 1. The phone's font size is honoured up to 1.25x: the app already
+      //    scales to the screen, and its bars have fixed heights.
+      // 2. Scale the whole tree to the design width, as the compass app does.
+      // 3. screenutil inside it, designed for the same screen, so .sp/.dp
       //    stay ~1 and nothing is scaled twice.
-      // 3. The glass scaffold is a Cupertino page, so Text gets no Material
-      //    default style; one transparent Material above every route fixes it.
-      builder: (context, child) => ScaleToWidth(
-        child: ScreenUtilScope(
-          child: Material(type: MaterialType.transparency, child: child),
-        ),
-      ),
+      // 4. One transparent Material above every route gives Text a style.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(
+            textScaler: mq.textScaler.clamp(
+              minScaleFactor: 1.0,
+              maxScaleFactor: 1.25,
+            ),
+          ),
+          child: ScaleToWidth(
+            child: ScreenUtilScope(
+              child: Material(type: MaterialType.transparency, child: child),
+            ),
+          ),
+        );
+      },
       home: const HomeShell(),
     );
   }
+}
+
+/// Lists give a very slight bounce at their ends instead of Android's
+/// stretch. The stretch redraws the list through an image filter, which
+/// switches off the glass blur while it lasts, so every card flashed clear.
+class _StillScroll extends MaterialScrollBehavior {
+  const _StillScroll();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const _SubtleBounce(parent: RangeMaintainingScrollPhysics());
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
+}
+
+class _SubtleBounce extends BouncingScrollPhysics {
+  const _SubtleBounce({super.parent});
+
+  @override
+  _SubtleBounce applyTo(ScrollPhysics? ancestor) =>
+      _SubtleBounce(parent: buildParent(ancestor));
+
+  // iOS uses 0.52; 0.035 lets the list move only a few points past its end.
+  @override
+  double frictionFactor(double overscrollFraction) =>
+      0.035 * (1 - overscrollFraction) * (1 - overscrollFraction);
+
+  // Stiff and fully damped: back in place at once, no wobble.
+  @override
+  SpringDescription get spring =>
+      SpringDescription.withDampingRatio(mass: 0.5, stiffness: 700, ratio: 1.0);
 }

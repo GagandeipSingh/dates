@@ -86,10 +86,16 @@ class _Sky extends CustomPainter {
         ).createShader(rect),
     );
 
-    final side = math.sqrt(size.width * size.width + size.height * size.height).ceilToDouble();
+    final side = math
+        .sqrt(size.width * size.width + size.height * size.height)
+        .ceilToDouble();
     final key = '$side|$dark';
     if (_topoKey != key) {
-      _topo = _drawTopo(side, dark ? Colors.white : Colors.black, dark ? 0.07 : 0.06);
+      _topo = _drawTopo(
+        side,
+        dark ? Colors.white : Colors.black,
+        dark ? 0.07 : 0.06,
+      );
       _topoKey = key;
     }
     canvas.save();
@@ -109,7 +115,10 @@ class _Sky extends CustomPainter {
 
     const step = 10.0;
     final n = (side / step).ceil() + 1;
-    final v = List.generate(n, (i) => List.generate(n, (j) => f(i * step, j * step)));
+    final v = List.generate(
+      n,
+      (i) => List.generate(n, (j) => f(i * step, j * step)),
+    );
 
     final rec = ui.PictureRecorder();
     final canvas = Canvas(rec);
@@ -150,7 +159,8 @@ class _Sky extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_Sky old) => old.sky != sky || old.dark != dark || old.accent != accent;
+  bool shouldRepaint(_Sky old) =>
+      old.sky != sky || old.dark != dark || old.accent != accent;
 }
 
 /// (top, bottom) sky colours for an hour of the day, 0..24.

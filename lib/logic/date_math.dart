@@ -11,7 +11,8 @@ DateTime dateOnly(DateTime d) => DateTime.utc(d.year, d.month, d.day);
 
 bool isLeapYear(int y) => (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
 
-int daysInMonth(int y, int m) => const [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1] +
+int daysInMonth(int y, int m) =>
+    const [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1] +
     (m == 2 && isLeapYear(y) ? 1 : 0);
 
 int daysInYear(int y) => isLeapYear(y) ? 366 : 365;
@@ -58,8 +59,12 @@ class Span {
 /// The span from [a] to [b]. Order does not matter; [Span.negative] says
 /// whether it ran backwards. [includeEnd] counts the end day itself, the way
 /// "1 Jan to 1 Jan" is one day of leave rather than zero.
-Span spanBetween(DateTime a, DateTime b,
-    {bool ignoreTime = false, bool includeEnd = false}) {
+Span spanBetween(
+  DateTime a,
+  DateTime b, {
+  bool ignoreTime = false,
+  bool includeEnd = false,
+}) {
   var s = ignoreTime ? dateOnly(a) : asUtc(a);
   var e = ignoreTime ? dateOnly(b) : asUtc(b);
   final negative = e.isBefore(s);
@@ -90,8 +95,14 @@ Span spanBetween(DateTime a, DateTime b,
 }
 
 /// Shifts [d] by the given amounts; [subtract] runs it backwards.
-DateTime shiftDate(DateTime d,
-    {int years = 0, int months = 0, int weeks = 0, int days = 0, bool subtract = false}) {
+DateTime shiftDate(
+  DateTime d, {
+  int years = 0,
+  int months = 0,
+  int weeks = 0,
+  int days = 0,
+  bool subtract = false,
+}) {
   final sign = subtract ? -1 : 1;
   var r = addMonths(dateOnly(d), sign * (years * 12 + months));
   r = r.add(Duration(days: sign * (weeks * 7 + days)));
@@ -151,8 +162,12 @@ class WorkingDays {
   final Map<int, int> perWeekday;
 }
 
-WorkingDays workingDays(DateTime a, DateTime b, Set<int> workdays,
-    {bool includeEnd = true}) {
+WorkingDays workingDays(
+  DateTime a,
+  DateTime b,
+  Set<int> workdays, {
+  bool includeEnd = true,
+}) {
   final c = weekdayCounts(a, b, includeEnd: includeEnd);
   var w = 0, off = 0;
   c.forEach((day, n) => workdays.contains(day) ? w += n : off += n);
@@ -192,7 +207,9 @@ DateTime nextLeapDay(DateTime from) {
 /// A birthday in a given year. Someone born on 29 February celebrates on
 /// 28 February in a common year (the more common convention).
 DateTime birthdayIn(DateTime birth, int year) {
-  final day = birth.month == 2 && birth.day == 29 && !isLeapYear(year) ? 28 : birth.day;
+  final day = birth.month == 2 && birth.day == 29 && !isLeapYear(year)
+      ? 28
+      : birth.day;
   return DateTime.utc(year, birth.month, day);
 }
 
