@@ -175,10 +175,36 @@ class AddScreen extends StatefulWidget {
 class _AddScreenState extends State<AddScreen> {
   DateTime start = _now();
   bool subtract = false;
+  // Opens on 30 days, the same answer the Tools tile shows, so the result
+  // is never just the start date echoed back.
   final ctl = {
     for (final k in ['Years', 'Months', 'Weeks', 'Days'])
-      k: TextEditingController(),
+      k: TextEditingController(text: k == 'Days' ? '30' : ''),
   };
+
+  /// One-tap amounts: (label, years, weeks, days).
+  static const _quick = <(String, int, int, int)>[
+    ('1 week', 0, 1, 0),
+    ('30 days', 0, 0, 30),
+    ('90 days', 0, 0, 90),
+    ('100 days', 0, 0, 100),
+    ('1 year', 1, 0, 0),
+  ];
+
+  void _set(int y, int w, int d) => setState(() {
+    ctl['Years']!.text = y == 0 ? '' : '$y';
+    ctl['Months']!.text = '';
+    ctl['Weeks']!.text = w == 0 ? '' : '$w';
+    ctl['Days']!.text = d == 0 ? '' : '$d';
+  });
+
+  /// "1 year 2 weeks 3 days": only the parts that are not zero.
+  String _amount() => [
+    if (_v('Years') > 0) plural(_v('Years'), 'year'),
+    if (_v('Months') > 0) plural(_v('Months'), 'month'),
+    if (_v('Weeks') > 0) plural(_v('Weeks'), 'week'),
+    if (_v('Days') > 0) plural(_v('Days'), 'day'),
+  ].join(' ');
 
   int _v(String k) => int.tryParse(ctl[k]!.text) ?? 0;
 
@@ -203,9 +229,12 @@ class _AddScreenState extends State<AddScreen> {
       subtract: subtract,
     );
     final gap = dateOnly(r).difference(dateOnly(start)).inDays.abs();
-    String text() =>
-        '${s.date(start)} ${subtract ? '−' : '+'} ${_v('Years')}y ${_v('Months')}m ${_v('Weeks')}w ${_v('Days')}d = '
-        '${DateFormat('EEEE').format(r)}, ${s.date(r)}';
+    final amount = _amount();
+    final empty = amount.isEmpty;
+    String text() => empty
+        ? s.date(start)
+        : '${s.date(start)} ${subtract ? '−' : '+'} $amount = '
+              '${DateFormat('EEEE').format(r)}, ${s.date(r)}';
 
     return ToolScreen(
       title: 'Add or Subtract',
@@ -273,6 +302,22 @@ class _AddScreenState extends State<AddScreen> {
                   ],
                 ],
               ),
+              SizedBox(height: 14.dp),
+              Wrap(
+                spacing: 8.dp,
+                runSpacing: 8.dp,
+                children: [
+                  for (final q in _quick)
+                    _QuickAmount(
+                      label: '${subtract ? '−' : '+'}${q.$1}',
+                      on: _v('Years') == q.$2 &&
+                          _v('Months') == 0 &&
+                          _v('Weeks') == q.$3 &&
+                          _v('Days') == q.$4,
+                      onTap: () => _set(q.$2, q.$3, q.$4),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -280,7 +325,18 @@ class _AddScreenState extends State<AddScreen> {
         Pane(
           tint: p.accent.withValues(alpha: 0.10),
           child: Column(
-            children: [
+            children: empty
+                ? [
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 18.dp),
+                      child: Text(
+                        'Enter years, months, weeks or days',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: p.sub, fontSize: 15.sp),
+                      ),
+                    ),
+                  ]
+                : [
               Caption(DateFormat('EEEE').format(r), color: p.accent),
               SizedBox(height: 6.dp),
               FittedBox(
@@ -294,6 +350,12 @@ class _AddScreenState extends State<AddScreen> {
                     letterSpacing: -0.6,
                   ),
                 ),
+              ),
+              SizedBox(height: 4.dp),
+              Text(
+                '$amount ${subtract ? 'before' : 'after'} ${s.date(start)}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: p.sub, fontSize: 13.5.sp),
               ),
               const Hairline(),
               ResultLine(
@@ -316,12 +378,53 @@ class _AddScreenState extends State<AddScreen> {
           onReset: () => setState(() {
             start = _now();
             subtract = false;
-            for (final c in ctl.values) {
-              c.clear();
+            for (final e in ctl.entries) {
+              e.value.text = e.key == 'Days' ? '30' : '';
             }
           }),
         ),
       ],
+    );
+  }
+}
+
+/// A one-tap amount under the inputs; lit when the inputs hold exactly it.
+class _QuickAmount extends StatelessWidget {
+  const _QuickAmount({
+    required this.label,
+    required this.on,
+    required this.onTap,
+  });
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Pal.of(context);
+    return Semantics(
+      button: true,
+      selected: on,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.symmetric(horizontal: 12.dp, vertical: 7.dp),
+          decoration: BoxDecoration(
+            color: on ? p.accent.withValues(alpha: 0.16) : p.faint,
+            borderRadius: BorderRadius.circular(10.dp),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: on ? p.accent : p.sub,
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

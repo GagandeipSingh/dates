@@ -71,6 +71,10 @@ class GlassScaffold extends StatelessWidget {
         systemNavigationBarColor: Colors.transparent,
         systemNavigationBarDividerColor: Colors.transparent,
         systemNavigationBarContrastEnforced: false,
+        // The presets assume a BLACK nav bar and so draw white nav buttons.
+        // Ours is transparent over the app, so the buttons must follow the
+        // status icons, or they vanish on a light screen (Samsung 3-button).
+        systemNavigationBarIconBrightness: overlay.statusBarIconBrightness,
       ),
       // The background sits OUTSIDE the Scaffold: the Scaffold shrinks its
       // body when the keyboard opens, and a background inside it would be
@@ -334,59 +338,84 @@ class _SheetStretch extends StatefulWidget {
   State<_SheetStretch> createState() => _SheetStretchState();
 }
 
-class _SheetStretchState extends State<_SheetStretch> {
+class _SheetStretchState extends State<_SheetStretch>
+    with SingleTickerProviderStateMixin {
   double _pull = 0; // raw finger travel upward, in dp
   double _from = 0; // where the release springs back from
-  int _release = 0;
   bool _held = false;
+  // Set while something inside the sheet (a date wheel, a list) is
+  // scrolling: that drag belongs to it, so the sheet does not stretch.
+  bool _inner = false;
+  late final AnimationController _back = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: kSpringMs),
+  );
 
   // Rubber: the first few dp follow the finger, then it stiffens.
   static double _rubber(double d) => 48 * (1 - math.exp(-d / 110));
 
+  @override
+  void dispose() {
+    _back.dispose();
+    super.dispose();
+  }
+
   void _up() {
+    _inner = false;
     if (!_held) return;
     setState(() {
       _held = false;
       _from = _rubber(_pull);
       _pull = 0;
-      _release++;
     });
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _from = 0;
+    } else {
+      _back.forward(from: 0);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final still = MediaQuery.disableAnimationsOf(context);
-    Widget body;
-    if (_held) {
-      body = Transform.translate(
-        offset: Offset(0, -_rubber(_pull)),
-        child: widget.child,
-      );
-    } else if (_from > 0 && !still) {
-      body = TweenAnimationBuilder<double>(
-        key: ValueKey(_release),
-        tween: Tween(begin: 1, end: 0),
-        duration: const Duration(milliseconds: kSpringMs),
-        curve: kSpring,
-        child: widget.child,
-        builder: (context, v, child) =>
-            Transform.translate(offset: Offset(0, -_from * v), child: child),
-      );
-    } else {
-      body = widget.child;
-    }
-    return Listener(
-      onPointerMove: (e) {
-        final next = _pull - e.delta.dy;
-        if (next <= 0 && !_held) return;
-        setState(() {
-          _held = next > 0;
-          _pull = math.max(0, next);
-        });
+    // One fixed structure whatever the state: swapping the wrapper around
+    // the child rebuilt everything inside it, so a date wheel being dragged
+    // up was thrown back to its start mid-drag.
+    return NotificationListener<ScrollStartNotification>(
+      onNotification: (_) {
+        _inner = true;
+        if (_held) {
+          setState(() {
+            _held = false;
+            _pull = 0;
+          });
+        }
+        return false;
       },
-      onPointerUp: (_) => _up(),
-      onPointerCancel: (_) => _up(),
-      child: body,
+      child: Listener(
+        onPointerMove: (e) {
+          if (_inner) return;
+          final next = _pull - e.delta.dy;
+          if (next <= 0 && !_held) return;
+          _back.stop();
+          setState(() {
+            _from = 0;
+            _held = next > 0;
+            _pull = math.max(0, next);
+          });
+        },
+        onPointerUp: (_) => _up(),
+        onPointerCancel: (_) => _up(),
+        child: AnimatedBuilder(
+          animation: _back,
+          child: widget.child,
+          builder: (context, child) {
+            final dy = _held
+                ? _rubber(_pull)
+                : _from * (1 - kSpring.transform(_back.value));
+            return Transform.translate(offset: Offset(0, -dy), child: child);
+          },
+        ),
+      ),
     );
   }
 }

@@ -1131,8 +1131,11 @@ class Segments<T> extends StatelessWidget {
               children: [
                 SpringValue(
                   value: index.toDouble(),
+                        // Firm enough to settle without a wobble; kept inside the
+                        // bar so the pill never slides past the end tab and clips.
+                        dampingRatio: 0.8,
                   builder: (context, at, child) => Positioned(
-                    left: w * at,
+                    left: w * at.clamp(0.0, (values.length - 1).toDouble()),
                     top: 0,
                     bottom: 0,
                     width: w,
