@@ -613,3 +613,36 @@ class _GlowPainter extends CustomPainter {
   bool shouldRepaint(_GlowPainter old) =>
       old.at != at || old.strength != strength || old.dark != dark;
 }
+
+/// Keeps the glass under a moving transform in step with it.
+///
+/// A lens reads where it sits on screen when it paints, but moving an
+/// ancestor ([Transform.translate] in a spring) repaints only the transform,
+/// not the glass. The glass then noticed a frame late and drew its edge
+/// where the card had been: a bright white rim flashing along the top of
+/// every card as a tab sprang in. Give [tick] the animation value; each new
+/// value repaints every lens below in the same frame.
+class GlassFollow extends SingleChildRenderObjectWidget {
+  const GlassFollow({super.key, required this.tick, super.child});
+
+  final double tick;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderGlassFollow();
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _RenderGlassFollow).repaintGlass();
+  }
+}
+
+class _RenderGlassFollow extends RenderProxyBox {
+  void repaintGlass() {
+    void visit(RenderObject node) {
+      if (node is _RenderLens) node.markNeedsPaint();
+      node.visitChildren(visit);
+    }
+
+    visitChildren(visit);
+  }
+}

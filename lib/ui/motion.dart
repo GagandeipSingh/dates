@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import 'glass_surface.dart';
+
 /// The app's motion, after iOS: things that MOVE (slide, grow, rotate,
 /// settle into a new shape) do it on a real spring that runs past its mark
 /// once and settles back, so the UI feels physical rather than tweened.
@@ -87,14 +89,19 @@ class SpringIn extends StatelessWidget {
       duration: Duration(milliseconds: soft ? kSpringSoftMs : kSpringMs),
       curve: soft ? kSpringSoft : kSpring,
       child: child,
-      builder: (context, v, child) => Transform.translate(
-        offset: from * (1 - v),
-        child: scaleFrom == 1
-            ? child
-            : Transform.scale(
-                scale: scaleFrom + (1 - scaleFrom) * v,
-                child: child,
-              ),
+      // GlassFollow repaints the glass inside on every step, so its edge
+      // moves with the card instead of a frame behind (a white rim flash).
+      builder: (context, v, child) => GlassFollow(
+        tick: v,
+        child: Transform.translate(
+          offset: from * (1 - v),
+          child: scaleFrom == 1
+              ? child
+              : Transform.scale(
+                  scale: scaleFrom + (1 - scaleFrom) * v,
+                  child: child,
+                ),
+        ),
       ),
     );
   }

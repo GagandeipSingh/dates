@@ -91,76 +91,41 @@ class TodayTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = Pal.of(context);
     final now = DateTime.now();
     final isWide = pageColumns(context, minColumn: 380) > 1;
-
-    final heroCard = Pane(
-      tint: p.accent.withValues(alpha: 0.035),
-      padding: EdgeInsets.fromLTRB(22.dp, 20.dp, 22.dp, 22.dp),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Caption(DateFormat('EEEE').format(now), color: p.accent),
-          SizedBox(height: 4.dp),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${now.day}',
-                style: TextStyle(
-                  color: p.ink,
-                  fontSize: 76.sp,
-                  height: 1,
-                  fontWeight: FontWeight.w300,
-                  letterSpacing: -3,
-                ),
-              ),
-              SizedBox(width: 12.dp),
-              // A long month name at a large font shrinks a little rather than
-              // running off the card.
-              Flexible(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: 8.dp),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.bottomLeft,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          DateFormat('MMMM').format(now),
-                          style: TextStyle(
-                            color: p.ink,
-                            fontSize: 22.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          '${now.year}',
-                          style: TextStyle(color: p.sub, fontSize: 16.sp),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+    // On a wide screen the rings move beside the calendar, so the two
+    // columns come out about the same height without stretching a card.
+    final left = [
+      _DateHeader(now: now),
+      SizedBox(height: 18.dp),
+      if (!isWide) ...[_Rings(now: now), SizedBox(height: 12.dp)],
+      _MonthCard(now: now, row: isWide ? 52 : 36),
+    ];
+    final right = [
+      const SectionTitle('Coming up'),
+      _ComingUp(now: now),
+      if (isWide) ...[SizedBox(height: 12.dp), _Rings(now: now)],
+      // A wide window has room beside the calendar: the quick jumps from
+      // today fill it with answers rather than leave it empty.
+      if (isWide) ...[
+        const SectionTitle('From today'),
+        Expanded(
+          child: _QuickDates(
+            today: DateTime(now.year, now.month, now.day),
+            more: true,
           ),
-        ],
-      ),
-    );
+        ),
+      ],
+    ];
 
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: contentMaxWidth(context)),
         child: PageScroll(
           padding: pagePadding(context, tabBar: true),
+          fit: true,
           children: isWide
               ? [
-                  // Two columns of about equal height, their first cards
-                  // level under matching headings, and the stat tiles in a
-                  // full-width band of three beneath both.
                   IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,41 +133,451 @@ class TodayTab extends StatelessWidget {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const SectionTitle('Date'),
-                              heroCard,
-                              Gap(12.dp),
-                              YearGlance(date: now, stats: false),
-                            ],
+                            children: left,
                           ),
                         ),
-                        Gap(20.dp),
-                        const Expanded(
+                        Gap(24.dp),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              SectionTitle('Quick tools'),
-                              // Fills down to the foot of the left column, its
-                              // rows spread evenly, so both columns end level.
-                              Expanded(child: _ToolList(limit: 3, fill: true)),
-                            ],
+                            children: right,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SectionTitle('This year'),
-                  YearGlance(date: now, progress: false, statsPerRow: 3),
                 ]
-              : [
-                  heroCard,
-                  Gap(12.dp),
-                  YearGlance(date: now),
-                  const SectionTitle('Quick tools'),
-                  const _ToolList(limit: 3),
-                ],
+              : [...left, ...right],
         ),
       ),
+    );
+  }
+}
+
+/// The date as type on the page itself, no card: the day of the week in
+/// the accent, the date large, and one quiet line of where it sits.
+class _DateHeader extends StatelessWidget {
+  const _DateHeader({required this.now});
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Pal.of(context);
+    final s = SettingsScope.of(context);
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 6.dp),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Caption(DateFormat('EEEE').format(now), color: p.accent),
+          SizedBox(height: 4.dp),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              DateFormat('d MMMM').format(now),
+              style: TextStyle(
+                color: p.ink,
+                fontSize: 40.sp,
+                height: 1.1,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -1,
+              ),
+            ),
+          ),
+          SizedBox(height: 4.dp),
+          Text(
+            '${now.year}  ·  Week ${weekOfYear(now, mondayFirst: s.mondayFirst)}'
+            '  ·  Day ${dayOfYear(now)}',
+            style: TextStyle(color: p.sub, fontSize: 14.sp),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// How far through the year and the month, as two rings side by side.
+class _Rings extends StatelessWidget {
+  const _Rings({required this.now});
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Pal.of(context);
+    final dim = daysInMonth(now.year, now.month);
+    final yearLeft = daysInYear(now.year) - dayOfYear(now);
+    Widget half(String title, double v, String left) => Row(
+      children: [
+        _Ring(value: v, size: 58.dp),
+        SizedBox(width: 12.dp),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: p.ink,
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(height: 2.dp),
+              Text(
+                left,
+                style: TextStyle(color: p.sub, fontSize: 12.5.sp),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    return Pane(
+      padding: EdgeInsets.fromLTRB(14.dp, 14.dp, 14.dp, 14.dp),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: half(
+                '${now.year}',
+                yearProgress(now),
+                '${n(yearLeft)} days left',
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12.dp),
+              child: Container(width: 0.6, color: p.faint),
+            ),
+            Expanded(
+              child: half(
+                DateFormat('MMMM').format(now),
+                now.day / dim,
+                '${plural(dim - now.day, 'day')} left',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A progress ring with its percentage inside.
+class _Ring extends StatelessWidget {
+  const _Ring({required this.value, required this.size});
+  final double value, size;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Pal.of(context);
+    return SizedBox.square(
+      dimension: size,
+      child: CustomPaint(
+        painter: _RingPainter(
+          value: value,
+          track: p.faint,
+          fill: p.accent,
+          width: size * 0.11,
+        ),
+        child: Center(
+          child: Text(
+            '${(value * 100).round()}%',
+            style: TextStyle(
+              color: p.ink,
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter({
+    required this.value,
+    required this.track,
+    required this.fill,
+    required this.width,
+  });
+  final double value, width;
+  final Color track, fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = (size.shortestSide - width) / 2;
+    final c = size.center(Offset.zero);
+    final base = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width;
+    canvas.drawCircle(c, r, base..color = track);
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r),
+      -1.5707963267948966,
+      6.283185307179586 * value.clamp(0.0, 1.0),
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..strokeCap = StrokeCap.round
+        ..color = fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.value != value || old.fill != fill || old.track != track;
+}
+
+/// This month as a calendar: today in an accent circle, the days gone
+/// quieter, weekends a shade softer.
+class _MonthCard extends StatelessWidget {
+  const _MonthCard({required this.now, this.row = 36});
+  final DateTime now;
+
+  /// Height of a week row. Taller beside the right column on a wide screen,
+  /// so the two columns end together without stretching a card.
+  final double row;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Pal.of(context);
+    final mondayFirst = SettingsScope.of(context).mondayFirst;
+    final dim = daysInMonth(now.year, now.month);
+    final first = DateTime(now.year, now.month, 1);
+    final lead = mondayFirst ? first.weekday - 1 : first.weekday % 7;
+    final cells = lead + dim;
+    final rows = (cells / 7).ceil();
+    // Weekday letters in the week's own order.
+    final names = [
+      for (var i = 0; i < 7; i++)
+        DateFormat('E')
+            .format(DateTime(2024, 1, mondayFirst ? 1 + i : 7 + i))
+            .substring(0, 1),
+    ];
+    bool weekendCol(int c) => mondayFirst ? c >= 5 : (c == 0 || c == 6);
+
+    return Pane(
+      padding: EdgeInsets.fromLTRB(14.dp, 14.dp, 14.dp, 10.dp),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.dp),
+            child: Row(
+              children: [
+                Text(
+                  DateFormat('MMMM').format(now),
+                  style: TextStyle(
+                    color: p.ink,
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${now.year}',
+                  style: TextStyle(color: p.sub, fontSize: 12.5.sp),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 10.dp),
+          Row(
+            children: [
+              for (var c = 0; c < 7; c++)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      names[c],
+                      style: TextStyle(
+                        color: p.sub,
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: 4.dp),
+          for (var r = 0; r < rows; r++)
+            Row(
+              children: [
+                for (var c = 0; c < 7; c++)
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final day = r * 7 + c - lead + 1;
+                        if (day < 1 || day > dim) {
+                          return SizedBox(height: row.dp);
+                        }
+                        final isToday = day == now.day;
+                        final past = day < now.day;
+                        return SizedBox(
+                          height: row.dp,
+                          child: Center(
+                            child: Container(
+                              width: 32.dp,
+                              height: 32.dp,
+                              alignment: Alignment.center,
+                              decoration: isToday
+                                  ? BoxDecoration(
+                                      color: p.accentRaw,
+                                      shape: BoxShape.circle,
+                                    )
+                                  : null,
+                              child: Text(
+                                '$day',
+                                style: TextStyle(
+                                  color: isToday
+                                      ? Colors.white
+                                      : past
+                                      ? p.sub.withValues(alpha: 0.45)
+                                      : weekendCol(c)
+                                      ? p.sub
+                                      : p.ink,
+                                  fontSize: 14.sp,
+                                  fontWeight: isToday
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What is next on the calendar, counted from today: four small cards,
+/// each a countdown with what it is and when.
+class _ComingUp extends StatelessWidget {
+  const _ComingUp({required this.now});
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Pal.of(context);
+    final today = DateTime(now.year, now.month, now.day);
+    int until(DateTime d) => DateTime.utc(
+      d.year,
+      d.month,
+      d.day,
+    ).difference(DateTime.utc(today.year, today.month, today.day)).inDays;
+    final weekend = today.weekday >= DateTime.saturday;
+    final sat = today.add(
+      Duration(days: (DateTime.saturday - today.weekday) % 7),
+    );
+    final nextMonth = DateTime(today.year, today.month + 1, 1);
+    final newYear = DateTime(today.year + 1, 1, 1);
+    final leap = nextLeapDay(today);
+    final fmt = DateFormat('EEE, d MMM');
+    // (icon, colour, days away, what, when)
+    final items = <(IconData, Color, int, String, String)>[
+      (
+        CupertinoIcons.sun_max_fill,
+        const Color(0xFFF08A1D),
+        weekend ? 0 : until(sat),
+        'Weekend',
+        weekend ? 'Today' : fmt.format(sat),
+      ),
+      (
+        CupertinoIcons.calendar,
+        const Color(0xFF1E7BF2),
+        until(nextMonth),
+        DateFormat('MMMM').format(nextMonth),
+        fmt.format(nextMonth),
+      ),
+      (
+        CupertinoIcons.sparkles,
+        const Color(0xFFE5407F),
+        until(newYear),
+        'New Year',
+        DateFormat('d MMM y').format(newYear),
+      ),
+      (
+        CupertinoIcons.star_fill,
+        const Color(0xFF6A4CF5),
+        until(leap),
+        'Leap day',
+        DateFormat('d MMM y').format(leap),
+      ),
+    ];
+    Widget card((IconData, Color, int, String, String) it) => GlassSurface(
+      radius: 16.dp,
+      padding: EdgeInsets.fromLTRB(12.dp, 12.dp, 10.dp, 12.dp),
+      child: Row(
+        children: [
+          Container(
+            width: 30.dp,
+            height: 30.dp,
+            decoration: BoxDecoration(
+              color: it.$2.withValues(alpha: p.dark ? 0.2 : 0.13),
+              borderRadius: BorderRadius.circular(9.dp),
+            ),
+            alignment: Alignment.center,
+            child: Icon(it.$1, size: 16.dp, color: it.$2),
+          ),
+          SizedBox(width: 10.dp),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    it.$3 == 0
+                        ? 'Today'
+                        : '${n(it.$3)} ${it.$3 == 1 ? 'day' : 'days'}',
+                    style: TextStyle(
+                      color: p.ink,
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                Text(
+                  it.$4,
+                  style: TextStyle(color: p.sub, fontSize: 12.sp),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    Widget row(int i) => IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: card(items[i])),
+          SizedBox(width: 12.dp),
+          Expanded(child: card(items[i + 1])),
+        ],
+      ),
+    );
+    return Column(
+      children: [
+        row(0),
+        SizedBox(height: 12.dp),
+        row(2),
+      ],
     );
   }
 }
@@ -230,7 +605,7 @@ class _Tool {
 final _tools = <_Tool>[
   _Tool(
     'Between Dates',
-    'Years, months, days and time between two dates',
+    'Time between any two dates',
     CupertinoIcons.hourglass,
     const Color(0xFF1E7BF2),
     () => const BetweenScreen(),
@@ -275,217 +650,485 @@ final _tools = <_Tool>[
 
 class ToolsTab extends StatelessWidget {
   const ToolsTab({super.key});
+
+  /// Three pairs: tools that count a span, tools that find a date, and
+  /// tools that check a fact. Each tile shows a live answer for today and
+  /// a small picture of it, so the screen says what a tool does by doing it.
+  static const _groups = <(String, List<int>)>[
+    ('Count', [0, 3]),
+    ('Find', [2, 4]),
+    ('Check', [1, 5]),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final p = Pal.of(context);
+    final settings = SettingsScope.of(context);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final newYear = DateTime(now.year + 1, 1, 1);
+    final toNewYear = newYear.difference(today).inDays;
+    final monthEnd = DateTime(
+      now.year,
+      now.month,
+      daysInMonth(now.year, now.month),
+    );
+    final workdays = settings.workdays;
+    final workLeft = workingDays(today, monthEnd, workdays).working;
+    final plus30 = today.add(const Duration(days: 30));
+    final leap = nextLeapDay(today).year;
+    final short = DateFormat('d MMM');
+
+    Widget chip(String text, Color c, {bool on = true}) => Container(
+      padding: EdgeInsets.symmetric(horizontal: 6.dp, vertical: 2.dp),
+      decoration: BoxDecoration(
+        color: on ? c.withValues(alpha: p.dark ? 0.22 : 0.14) : p.faint,
+        borderRadius: BorderRadius.circular(7.dp),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: on ? c : p.sub,
+          fontSize: 10.sp,
+          fontWeight: FontWeight.w500,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+
+    // Between Dates: today joined to New Year.
+    Widget span(Color c) => FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          chip('Today', c),
+          SizedBox(
+            width: 52.dp,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.dp),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 2,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(1),
+                        gradient: LinearGradient(
+                          colors: [c.withValues(alpha: 0.15), c],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Icon(CupertinoIcons.chevron_right, size: 10.dp, color: c),
+                ],
+              ),
+            ),
+          ),
+          chip(short.format(newYear), c),
+        ],
+      ),
+    );
+
+    // Working Days: every day left this month, work days filled.
+    Widget days(Color c) => Wrap(
+      spacing: 4.dp,
+      runSpacing: 4.dp,
+      children: [
+        for (
+          var d = today;
+          !d.isAfter(monthEnd);
+          d = DateTime(d.year, d.month, d.day + 1)
+        )
+          Container(
+            width: 7.dp,
+            height: 7.dp,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: workdays.contains(d.weekday) ? c : p.faint,
+            ),
+          ),
+      ],
+    );
+
+    // Add or Subtract: today moved 30 days on.
+    Widget shift(Color c) => FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          chip(short.format(today), c, on: false),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 5.dp),
+            child: Text(
+              '+30',
+              style: TextStyle(
+                color: p.sub,
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          chip(short.format(plus30), c),
+        ],
+      ),
+    );
+
+    // Weekday: the week's letters, today lit.
+    Widget week(Color c) {
+      final first = settings.mondayFirst ? 1 : 7;
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (var i = 0; i < 7; i++)
+            Builder(
+              builder: (_) {
+                final wd = (first - 1 + i) % 7 + 1;
+                final on = wd == now.weekday;
+                return Container(
+                  width: 16.dp,
+                  height: 16.dp,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: on ? c : Colors.transparent,
+                  ),
+                  child: Text(
+                    DateFormat(
+                      'E',
+                    ).format(DateTime(2024, 1, wd)).substring(0, 1),
+                    style: TextStyle(
+                      color: on ? Colors.white : p.sub,
+                      fontSize: 10.5.sp,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      );
+    }
+
+    // Age: the three parts it answers in.
+    Widget parts(Color c) => Wrap(
+      spacing: 5.dp,
+      runSpacing: 5.dp,
+      children: [chip('Years', c), chip('Months', c), chip('Days', c)],
+    );
+
+    // Leap Year: this year to the next leap year.
+    Widget years(Color c) => Wrap(
+      spacing: 5.dp,
+      runSpacing: 5.dp,
+      children: [
+        for (var y = now.year; y <= leap && y < now.year + 4; y++)
+          chip('$y', c, on: y == leap),
+      ],
+    );
+
+    // (value, what it means, picture) for each tool, in _tools order.
+    final live = <(String, String, Widget Function(Color))>[
+      (n(toNewYear), 'days to New Year', span),
+      ('To the day', 'your exact age', parts),
+      (short.format(plus30), '30 days from today', shift),
+      (
+        '$workLeft',
+        'work days left in ${DateFormat('MMMM').format(now)}',
+        days,
+      ),
+      (DateFormat('EEEE').format(now), 'today', week),
+      ('$leap', 'next leap year', years),
+    ];
+    // A phone or an unfolded foldable: one column. A tablet: two. A
+    // desktop window: three, so the six tools sit in one band.
+    final big = isWideLayout(context);
+    Widget tile(int i) => _ToolTile(
+      tool: _tools[i],
+      value: live[i].$1,
+      note: live[i].$2,
+      picture: live[i].$3(_tools[i].color),
+      big: big,
+    );
+    // A phone: each group's two tools side by side. A fold, tablet or
+    // desktop: the three groups side by side, each group's tools stacked,
+    // so every tile keeps a tile's shape and the screen is filled.
+    Widget group((String, List<int>) g) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionTitle(g.$1),
+        Expanded(
+          child: big
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < g.$2.length; i++) ...[
+                      if (i > 0) SizedBox(height: 10.dp),
+                      Expanded(child: tile(g.$2[i])),
+                    ],
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < g.$2.length; i++) ...[
+                      if (i > 0) SizedBox(width: 10.dp),
+                      Expanded(child: tile(g.$2[i])),
+                    ],
+                  ],
+                ),
+        ),
+      ],
+    );
+    final quick = IntrinsicHeight(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionTitle('From today'),
+          Expanded(
+            child: _QuickDates(today: today, perRow: big ? 4 : 2),
+          ),
+        ],
+      ),
+    );
+    // Side by side, every section in a row is the same height.
+    Widget band(List<Widget> items) => IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var j = 0; j < items.length; j++) ...[
+            if (j > 0) Gap(16.dp),
+            Expanded(child: items[j]),
+          ],
+        ],
+      ),
+    );
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: contentMaxWidth(context)),
         child: PageScroll(
           padding: pagePadding(context, tabBar: true),
-          children: const [_ToolList()],
+          fit: true,
+          children: big
+              ? [
+                  band([for (final g in _groups) group(g)]),
+                  SizedBox(height: 8.dp),
+                  quick,
+                ]
+              : [
+                  for (final g in _groups) band([group(g)]),
+                  quick,
+                ],
         ),
       ),
     );
   }
 }
 
-class _ToolList extends StatelessWidget {
-  const _ToolList({this.limit, this.fill = false});
-  final int? limit;
+/// Common jumps from today, answered at a glance: a week, a fortnight,
+/// 30, 90 and 100 days, a year. Tapping opens Add or Subtract.
+class _QuickDates extends StatelessWidget {
+  const _QuickDates({required this.today, this.perRow = 2, this.more = false});
+  final DateTime today;
 
-  /// Grow to the height it is given, spreading the rows evenly.
-  final bool fill;
+  /// Six jumps instead of four, for a tall card beside the calendar.
+  final bool more;
+
+  /// Cells per row: four in a wide band, else two rows of two.
+  final int perRow;
 
   @override
   Widget build(BuildContext context) {
     final p = Pal.of(context);
-    final list = limit == null ? _tools : _tools.take(limit!).toList();
-    final columns = limit == null ? pageColumns(context, minColumn: 380) : 1;
-
-    // A desktop or landscape tablet: big tiles, three to a row, so the page
-    // is filled with the tools rather than six thin rows in empty space.
-    final tiles = limit == null
-        ? pageColumns(context, minColumn: 290, max: 3)
-        : 1;
-    // An unfolded foldable fits two: the same big tiles, two to a row, so
-    // the near-square page is filled rather than three thin rows mid-screen.
-    if (tiles >= 2) {
-      final rows = <Widget>[];
-      for (var i = 0; i < list.length; i += tiles) {
-        rows.add(
-          Padding(
-            padding: EdgeInsets.only(bottom: 16.dp),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var j = 0; j < tiles; j++) ...[
-                    if (j > 0) SizedBox(width: 16.dp),
-                    Expanded(
-                      child: i + j < list.length
-                          ? _ToolTile(tool: list[i + j])
-                          : const SizedBox(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-      return Column(children: rows);
-    }
-
-    // Side by side, each tool its own card. Rows size to their tallest card,
-    // never to a fixed height, so a larger font wraps instead of clipping.
-    if (columns > 1) {
-      final rows = <Widget>[];
-      for (var i = 0; i < list.length; i += columns) {
-        rows.add(
-          Padding(
-            padding: EdgeInsets.only(bottom: 12.dp),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var j = 0; j < columns; j++) ...[
-                    if (j > 0) SizedBox(width: 12.dp),
-                    Expanded(
-                      child: i + j < list.length
-                          ? Pane(
-                              padding: EdgeInsets.symmetric(vertical: 4.dp),
-                              child: _ToolRow(tool: list[i + j]),
-                            )
-                          : const SizedBox(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-      return Column(children: rows);
-    }
-
-    return Pane(
-      padding: EdgeInsets.symmetric(vertical: 6.dp),
+    final fmt = DateFormat('EEE, d MMM');
+    final jumps = <(String, DateTime)>[
+      ('1 week', today.add(const Duration(days: 7))),
+      if (more) ('2 weeks', today.add(const Duration(days: 14))),
+      ('30 days', today.add(const Duration(days: 30))),
+      if (more) ('90 days', today.add(const Duration(days: 90))),
+      ('100 days', today.add(const Duration(days: 100))),
+      ('1 year', DateTime(today.year + 1, today.month, today.day)),
+    ];
+    Widget cell((String, DateTime) j) => Padding(
+      padding: EdgeInsets.symmetric(vertical: 8.dp, horizontal: 4.dp),
       child: Column(
-        mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
-        mainAxisAlignment: fill
-            ? MainAxisAlignment.spaceEvenly
-            : MainAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < list.length; i++) ...[
-            if (i > 0)
-              Padding(
-                padding: EdgeInsets.only(left: 70.dp),
-                child: Container(height: 0.6, color: p.faint),
-              ),
-            _ToolRow(tool: list[i]),
-          ],
+          Text(
+            j.$1,
+            style: TextStyle(color: p.sub, fontSize: 11.5.sp),
+          ),
+          SizedBox(height: 2.dp),
+          Text(
+            fmt.format(j.$2),
+            style: TextStyle(
+              color: p.ink,
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w500,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ],
+      ),
+    );
+    Widget line() => Container(height: 0.6, color: p.faint);
+    return GlassPress(
+      label: 'Add or Subtract',
+      onTap: () => Navigator.of(
+        context,
+      ).push(CupertinoPageRoute(builder: (_) => const AddScreen())),
+      builder: (down) => GlassSurface(
+        radius: 16.dp,
+        lit: down,
+        padding: EdgeInsets.fromLTRB(12.dp, 6.dp, 12.dp, 6.dp),
+        child: Column(
+          children: [
+            for (var r = 0; r < jumps.length ~/ perRow; r++) ...[
+              if (r > 0) line(),
+              Expanded(
+                child: Row(
+                  children: [
+                    for (var k = 0; k < perRow; k++)
+                      Expanded(child: cell(jumps[r * perRow + k])),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// A tool as a tall glass tile: its icon large at the top, the name and
-/// what it does under it. Swells under the finger like every glass control.
+/// A tool as a small glass tile: badge and name, today's answer from that
+/// tool, and a small picture of it pinned to the bottom.
 class _ToolTile extends StatelessWidget {
-  const _ToolTile({required this.tool});
+  const _ToolTile({
+    required this.tool,
+    required this.value,
+    required this.note,
+    required this.picture,
+    this.big = false,
+  });
   final _Tool tool;
+  final String value, note;
+  final Widget picture;
+
+  /// Larger type for a tablet, fold or desktop window.
+  final bool big;
 
   @override
   Widget build(BuildContext context) {
     final p = Pal.of(context);
     final t = tool;
-    // A short window (a tablet in landscape, a desktop window not
-    // maximised) gets a tighter tile, so the two rows keep air above the tab
-    // bar instead of pressing into it. A full desktop keeps the big tile.
-    final tight = MediaQuery.sizeOf(context).height < 650;
-    double k(double v) => tight ? v * 0.8 : v;
     return GlassPress(
-      label: '${t.title}. ${t.subtitle}',
+      label: '${t.title}. $value $note',
       onTap: () => Navigator.of(
         context,
       ).push(CupertinoPageRoute(builder: (_) => t.page())),
       builder: (down) => GlassSurface(
-        radius: 28.dp,
+        radius: 16.dp,
         lit: down,
-        padding: EdgeInsets.fromLTRB(k(22).dp, k(22).dp, k(18).dp, k(22).dp),
+        padding: big
+            ? EdgeInsets.all(16.dp)
+            : EdgeInsets.fromLTRB(12.dp, 12.dp, 12.dp, 13.dp),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: k(56).dp,
-                  height: k(56).dp,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(k(17).dp),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color.lerp(t.color, Colors.white, 0.18)!,
-                        t.color,
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: t.color.withValues(alpha: 0.35),
-                        blurRadius: 14.dp,
-                        offset: Offset(0, 5.dp),
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: t.glyph == null
-                      ? Icon(t.icon, color: Colors.white, size: k(28).dp)
-                      : Text(
-                          t.glyph!,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: k(24).sp,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
-                            height: 1,
-                          ),
-                        ),
+                _Badge(
+                  color: t.color,
+                  icon: t.icon,
+                  glyph: t.glyph,
+                  size: big ? 32.dp : 24.dp,
                 ),
-                const Spacer(),
-                Icon(CupertinoIcons.chevron_right, size: 17.dp, color: p.sub),
+                SizedBox(width: 9.dp),
+                Expanded(
+                  child: Text(
+                    t.title,
+                    style: TextStyle(
+                      color: p.ink,
+                      fontSize: big ? 15.sp : 12.5.sp,
+                      fontWeight: FontWeight.w500,
+                      height: 1.15,
+                    ),
+                  ),
+                ),
               ],
             ),
-            SizedBox(height: k(22).dp),
-            Text(
-              t.title,
-              style: TextStyle(
-                color: p.ink,
-                fontSize: (tight ? 17.0 : 19.0).sp,
-                fontWeight: FontWeight.w700,
+            SizedBox(height: 14.dp),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: p.ink,
+                  fontSize: big ? 26.sp : 17.sp,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.2,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
-            SizedBox(height: 5.dp),
-            // Two lines kept for every description, so all the tiles come
-            // out the same size whether theirs wraps or not.
             Text(
-              '${t.subtitle}\n',
-              maxLines: 2,
-              overflow: TextOverflow.clip,
-              style: TextStyle(
-                color: p.sub,
-                fontSize: (tight ? 12.5 : 13.5).sp,
-                height: 1.35,
-              ),
+              note,
+              style: TextStyle(color: p.sub, fontSize: big ? 13.sp : 11.sp),
             ),
+            SizedBox(height: 14.dp),
+            const Spacer(),
+            picture,
           ],
         ),
       ),
     );
   }
+}
+
+/// A coloured square with a white icon (or a glyph, as Leap Year's "29").
+class _Badge extends StatelessWidget {
+  const _Badge({
+    required this.color,
+    required this.icon,
+    required this.size,
+    this.glyph,
+  });
+  final Color color;
+  final IconData icon;
+  final String? glyph;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(size * 0.26),
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color.lerp(color, Colors.white, 0.18)!, color],
+      ),
+    ),
+    alignment: Alignment.center,
+    child: glyph == null
+        ? Icon(icon, color: Colors.white, size: size * 0.5)
+        : Text(
+            glyph!,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: size * 0.4,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              height: 1,
+            ),
+          ),
+  );
 }
 
 class _ToolRow extends StatefulWidget {
@@ -781,6 +1424,9 @@ class SettingsTab extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: contentMaxWidth(context)),
         child: PageScroll(
           padding: pagePadding(context, tabBar: true),
+          // Wide: scale to fit like Today and Tools, so the footer never
+          // ends up behind the tab bar on a landscape tablet.
+          fit: true,
           children: [
             if (isWide) ...[
               // Two columns of equal height, their last cards stretched so

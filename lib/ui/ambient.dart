@@ -4,9 +4,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-/// The background, after the compass app's: a sky that follows the time of
-/// day (navy at night, rose at dawn, blue by day, gold late afternoon, violet
-/// at dusk; deep in dark mode, pale in light), faint topographic contour
+/// The background, after Breeze's: a sky that follows the time of day
+/// (navy at night, rose at dawn, blue by day, gold late afternoon, violet at dusk;
+/// toned down with [_calm] to a serene, even field), faint topographic contour
 /// lines so the glass above has real texture to blur, and a light wash of the
 /// chosen accent at the top. Re-read once a minute.
 class AmbientBackground extends StatefulWidget {
@@ -66,13 +66,13 @@ class _Sky extends CustomPainter {
     canvas.drawRect(
       rect,
       Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [sky.$1, sky.$2],
-        ).createShader(rect),
+        // Even top-to-bottom: the whole field is one tone (the lower sky
+        // colour), so the top matches the bottom instead of a visible gradient.
+        ..color = _calm(sky.$2, dark),
     );
-    // The accent, washed in from the top and fading by mid-screen.
+    // The accent, washed in from the top and fading by mid-screen. Kept faint
+    // so the background reads calm rather than coloured, keeping the first
+    // card on the home screen crisp and clean.
     canvas.drawRect(
       rect,
       Paint()
@@ -80,7 +80,7 @@ class _Sky extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.center,
           colors: [
-            accent.withValues(alpha: dark ? 0.22 : 0.20),
+            accent.withValues(alpha: dark ? 0.05 : 0.04),
             accent.withValues(alpha: 0.0),
           ],
         ).createShader(rect),
@@ -161,6 +161,17 @@ class _Sky extends CustomPainter {
   @override
   bool shouldRepaint(_Sky old) =>
       old.sky != sky || old.dark != dark || old.accent != accent;
+}
+
+/// Tones a sky colour down to a near-black (dark) or near-white (light) page,
+/// for contrast: the time of day survives only as a faint hue, the lightness
+/// is fixed so text and glass always sit on the same strong ground.
+Color _calm(Color c, bool dark) {
+  final h = HSLColor.fromColor(c);
+  return h
+      .withSaturation((h.saturation * (dark ? 0.35 : 0.5)).clamp(0.0, 1.0))
+      .withLightness(dark ? 0.055 : 0.975)
+      .toColor();
 }
 
 /// (top, bottom) sky colours for an hour of the day, 0..24.

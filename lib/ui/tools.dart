@@ -410,6 +410,49 @@ class _AgeScreenState extends State<AgeScreen> {
           ),
         ),
         Gap(12.dp),
+        // Wide: the card ends the left column and is stretched level with
+        // the totals, so it stacks big and centred rather than leaving a
+        // one-line row floating in an empty card.
+        if (pageColumns(context, minColumn: 380) > 1)
+          Pane(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44.dp,
+                  height: 44.dp,
+                  decoration: BoxDecoration(
+                    color: p.accent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(13.dp),
+                  ),
+                  child: Icon(CupertinoIcons.gift_fill, color: p.accent),
+                ),
+                SizedBox(height: 10.dp),
+                Text(
+                  nb.daysAway == 0 ? 'Today' : plural(nb.daysAway, 'day'),
+                  style: TextStyle(
+                    color: p.ink,
+                    fontSize: 28.sp,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                Text(
+                  nb.daysAway == 0
+                      ? 'Happy birthday!'
+                      : 'until your next birthday',
+                  style: TextStyle(color: p.sub, fontSize: 14.sp),
+                ),
+                SizedBox(height: 4.dp),
+                Text(
+                  '${DateFormat('EEEE').format(nb.date)}, ${s.date(nb.date)} · turning ${nb.turning}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: p.sub, fontSize: 13.sp),
+                ),
+              ],
+            ),
+          )
+        else
         Pane(
           child: Row(
             children: [

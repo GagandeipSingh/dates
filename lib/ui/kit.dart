@@ -86,21 +86,88 @@ EdgeInsets pagePadding(BuildContext context, {bool tabBar = false}) {
 /// window sits in its vertical middle instead of leaving a band of empty
 /// space under it; a phone keeps the usual top-aligned list.
 class PageScroll extends StatelessWidget {
-  const PageScroll({super.key, required this.padding, required this.children});
+  const PageScroll({
+    super.key,
+    required this.padding,
+    required this.children,
+    this.top = false,
+    this.fill = false,
+    this.fit = false,
+  });
   final EdgeInsets padding;
   final List<Widget> children;
 
+  /// Keep the page under its title on a wide screen too. A dense page
+  /// (Today, Tools) floating in the middle leaves a band of nothing
+  /// between the title and the content.
+  final bool top;
+
+  /// On a wide screen, stretch the page to the window's height: children
+  /// wrapped in Expanded share what is left, so a short page grows into
+  /// the screen instead of sitting small in it.
+  final bool fill;
+
+  /// On a wide screen, never run under the tab bar: a page taller than the
+  /// window (a short 1280 x 720 desktop) is scaled down to fit between the
+  /// title and the bar, centred. For pages that are one screen by design.
+  final bool fit;
+
   @override
   Widget build(BuildContext context) {
-    if (!isWideLayout(context)) {
+    final wide = isWideLayout(context);
+    if (wide && fill) {
+      return LayoutBuilder(
+        builder: (context, c) => SingleChildScrollView(
+          padding: padding,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: math.max(0, c.maxHeight - padding.vertical),
+            ),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (!wide || top) {
       return ListView(padding: padding, children: children);
+    }
+    // Centre between the page title and the top of the tab bar. The top
+    // padding reserves the whole title bar, whose text sits high in it, so
+    // the true middle is a little above the padded box's middle.
+    final lift = 12.dp;
+    final centred = padding.copyWith(
+      top: math.max(0.0, padding.top - lift),
+      bottom: padding.bottom + lift,
+    );
+    if (fit) {
+      return LayoutBuilder(
+        builder: (context, c) => Padding(
+          padding: centred,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: math.max(0.0, c.maxWidth - centred.horizontal),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+        ),
+      );
     }
     return LayoutBuilder(
       builder: (context, c) => SingleChildScrollView(
-        padding: padding,
+        padding: centred,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            minHeight: math.max(0, c.maxHeight - padding.vertical),
+            minHeight: math.max(0, c.maxHeight - centred.vertical),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -450,7 +517,7 @@ class Pane extends StatelessWidget {
     // middle; cards inside it are not stretched.
     final fill = _PaneFill.of(context);
     return GlassSurface(
-      radius: 26.dp,
+      radius: 18.dp,
       padding: padding ?? EdgeInsets.fromLTRB(18.dp, 16.dp, 18.dp, 16.dp),
       tint: tint,
       child: !fill
@@ -861,7 +928,9 @@ class ResultLine extends StatelessWidget {
             ),
           ),
           SizedBox(width: 12.dp),
-          Flexible(
+          // Expanded, not Flexible: a loose child shrinks to its text, so
+          // the value sat mid-card and the right half of the card was empty.
+          Expanded(
             flex: 2,
             child: Text(
               value,
