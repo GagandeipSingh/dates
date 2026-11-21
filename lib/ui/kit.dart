@@ -216,9 +216,9 @@ class ToolScreen extends StatelessWidget {
       bottomBarHeight: _actions == null ? 0 : 58.dp,
       bottomBar: _actions == null
           ? null
-          : SpringIn(
+          : KeyedSubtree(
+              // Arrives with the screen (see rise above).
               key: const ValueKey('actions'),
-              from: Offset(0, 110.dp),
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
                   24.dp,
@@ -264,11 +264,11 @@ class ToolScreen extends StatelessWidget {
 
   List<Widget> _layout(BuildContext context) {
     final children = this.children.where((w) => w is! ResultActions).toList();
-    Widget rise(Widget w, int i) => SpringIn(
-      from: Offset(0, 18.dp + 6.dp * i.clamp(0, 6)),
-      soft: true,
-      child: w,
-    );
+    // The cards arrive with the screen, as on iOS. They used to rise one
+    // after another as it slid in, which redrew every glass card on every
+    // frame of the slide and made the open stutter; the screen now slides
+    // in as one still picture (StillWhileMoving), which needs it still.
+    Widget rise(Widget w, int i) => w;
 
     final wide = pageColumns(context, minColumn: 380) > 1;
     if (!wide) {
@@ -1131,9 +1131,9 @@ class Segments<T> extends StatelessWidget {
               children: [
                 SpringValue(
                   value: index.toDouble(),
-                        // Firm enough to settle without a wobble; kept inside the
-                        // bar so the pill never slides past the end tab and clips.
-                        dampingRatio: 0.8,
+                  // Firm enough to settle without a wobble; kept inside the
+                  // bar so the pill never slides past the end tab and clips.
+                  dampingRatio: 0.8,
                   builder: (context, at, child) => Positioned(
                     left: w * at.clamp(0.0, (values.length - 1).toDouble()),
                     top: 0,

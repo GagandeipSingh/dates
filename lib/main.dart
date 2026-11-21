@@ -2,10 +2,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'state/app_update.dart';
 import 'state/settings.dart';
 import 'ui/glass_surface.dart' show GlassLens;
 import 'ui/home.dart';
+import 'ui/page_motion.dart';
 import 'ui/scale.dart';
+import 'ui/update_prompt.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,10 +38,21 @@ Future<void> main() async {
   await GlassLens.load();
   final settings = await Settings.load();
   runApp(SettingsScope(settings: settings, child: const DatesApp()));
+  // Play's own "Update available" sheet, when Play has a newer version.
+  AppUpdater.instance
+    ..onReady = () async {
+      final context = DatesApp.navigatorKey.currentContext;
+      if (context == null || !context.mounted) return false;
+      return showUpdateReady(context);
+    }
+    ..start();
 }
 
 class DatesApp extends StatelessWidget {
   const DatesApp({super.key});
+
+  /// For prompts raised from outside the tree (the update-ready sheet).
+  static final navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +81,7 @@ class DatesApp extends StatelessWidget {
       ),
     );
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Dates',
       debugShowCheckedModeBanner: false,
       scrollBehavior: const _StillScroll(),
@@ -99,7 +114,11 @@ class DatesApp extends StatelessWidget {
           ),
         );
       },
-      home: const HomeShell(),
+      // The home screen is the same kind of route as every tool screen, so
+      // it slides aside under a push as one still picture too. (As a
+      // MaterialPageRoute it was moved by Flutter's delegated transition,
+      // which hides the slide from the screen's own transition.)
+      onGenerateRoute: (_) => GlassPageRoute(builder: (_) => const HomeShell()),
     );
   }
 }

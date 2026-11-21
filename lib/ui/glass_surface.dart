@@ -394,7 +394,23 @@ class _RenderLens extends RenderProxyBox {
     return Offset.zero;
   }
 
-  Rect _onScreen() => _physical(this).shift(-_passOrigin());
+  Rect _onScreen() {
+    // A screen sliding in or out is drawn once into a picture and the
+    // picture is moved (GlassPass). The backdrop is then that picture, in
+    // its own pixels, so the glass is placed in the screen's own
+    // coordinates and stays put while the picture slides.
+    for (var node = parent; node != null; node = node.parent) {
+      if (node is RenderGlassPass && node.active) {
+        final r = MatrixUtils.transformRect(
+          getTransformTo(node),
+          Offset.zero & size,
+        );
+        final k = node.pixelRatio;
+        return Rect.fromLTWH(r.left * k, r.top * k, r.width * k, r.height * k);
+      }
+    }
+    return _physical(this).shift(-_passOrigin());
+  }
 
   @override
   void attach(PipelineOwner owner) {
@@ -502,6 +518,38 @@ class _RenderLens extends RenderProxyBox {
     layer.filter = filter;
     context.pushLayer(layer, super.paint, offset);
   }
+}
+
+/// Draws its screen once into a picture while [controller] allows it, and
+/// moves the picture instead of redrawing every glass surface on every
+/// frame: what makes a screen slide in smoothly. Glass inside it is told
+/// to sample the picture rather than the screen.
+class GlassPass extends SingleChildRenderObjectWidget {
+  const GlassPass({super.key, required this.controller, super.child});
+
+  final SnapshotController controller;
+
+  @override
+  RenderGlassPass createRenderObject(BuildContext context) =>
+      RenderGlassPass(controller, MediaQuery.devicePixelRatioOf(context));
+
+  @override
+  void updateRenderObject(BuildContext context, RenderGlassPass renderObject) {
+    renderObject
+      ..controller = controller
+      ..pixelRatio = MediaQuery.devicePixelRatioOf(context);
+  }
+}
+
+class RenderGlassPass extends RenderProxyBox {
+  RenderGlassPass(this.controller, this.pixelRatio);
+
+  SnapshotController controller;
+
+  /// The picture's pixel ratio: the snapshot uses the (scaled) MediaQuery's.
+  double pixelRatio;
+
+  bool get active => controller.allowSnapshotting;
 }
 
 /// The frost's rim: a lit hairline, brightest along the top.

@@ -7,6 +7,7 @@ import '../state/settings.dart';
 import 'glass_surface.dart';
 import 'glass_tabs.dart';
 import 'kit.dart';
+import 'page_motion.dart';
 import 'scale.dart';
 import 'tools.dart';
 
@@ -979,7 +980,7 @@ class _QuickDates extends StatelessWidget {
       label: 'Add or Subtract',
       onTap: () => Navigator.of(
         context,
-      ).push(CupertinoPageRoute(builder: (_) => const AddScreen())),
+      ).push(GlassPageRoute(builder: (_) => const AddScreen())),
       builder: (down) => GlassSurface(
         radius: 16.dp,
         lit: down,
@@ -1027,9 +1028,8 @@ class _ToolTile extends StatelessWidget {
     final t = tool;
     return GlassPress(
       label: '${t.title}. $value $note',
-      onTap: () => Navigator.of(
-        context,
-      ).push(CupertinoPageRoute(builder: (_) => t.page())),
+      onTap: () =>
+          Navigator.of(context).push(GlassPageRoute(builder: (_) => t.page())),
       builder: (down) => GlassSurface(
         radius: 16.dp,
         lit: down,
@@ -1157,7 +1157,7 @@ class _ToolRowState extends State<_ToolRow> {
           onTapUp: (_) => setState(() => down = false),
           onTap: () => Navigator.of(
             context,
-          ).push(CupertinoPageRoute(builder: (_) => t.page())),
+          ).push(GlassPageRoute(builder: (_) => t.page())),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
             margin: EdgeInsets.symmetric(horizontal: 6.dp),
