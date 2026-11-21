@@ -1504,10 +1504,13 @@ void showToast(
 
   entry = OverlayEntry(
     builder: (ctx) {
+      // At the TOP, sliding down from under the status bar. Android 13+ (and
+      // Samsung earlier) shows its own "Copied" pill near the bottom whenever
+      // an app writes the clipboard, so a toast down there landed on it.
+      // It starts BELOW the title bar: right under the status bar it sat on
+      // the page title and back button (seen on a 360 x 640 Android 9 phone).
       final mq = MediaQuery.of(ctx);
-      final bottom = mq.viewInsets.bottom > 0
-          ? mq.viewInsets.bottom + 16.dp
-          : mq.padding.bottom + 96.dp;
+      final top = mq.padding.top + 52.dp;
       final body = Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
@@ -1552,7 +1555,7 @@ void showToast(
           builder: (ctx, v, child) => Positioned(
             left: 16.dp,
             right: 16.dp,
-            bottom: bottom - (bottom + 140.dp) * (1 - v),
+            top: top - (top + 140.dp) * (1 - v),
             child: child!,
           ),
         ),
