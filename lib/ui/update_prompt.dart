@@ -7,7 +7,7 @@ import 'scale.dart';
 /// "Update ready": the new version is downloaded. Restart now, or let it
 /// install the next time the app is closed. True if the user chose restart.
 Future<bool> showUpdateReady(BuildContext context) async {
-  final restart = await showGlassSheet<bool>(
+  final restart = await showAppSheet<bool>(
     context,
     builder: (ctx) {
       final p = Pal.of(ctx);

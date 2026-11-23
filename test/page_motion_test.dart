@@ -1,6 +1,6 @@
-// A screen slides in and out as one still picture (StillWhileMoving), and
-// is live again the moment the slide ends. Redrawing every glass card on
-// every frame of the slide is what made opening a tool stutter.
+// The screen under a push slides aside as one still picture
+// (StillWhileMoving) and is live again the moment the slide ends; the
+// arriving screen stays live so its content can assemble.
 import 'package:dates/main.dart';
 import 'package:dates/state/settings.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +27,11 @@ void main() {
 
     await t.tap(find.bySemanticsLabel('Tools').last);
     await t.pumpAndSettle();
+    // The tile may sit below the large app bar's fold.
+    await t.runAsync(
+      () => Scrollable.ensureVisible(t.element(find.text('Age').first)),
+    );
+    await t.pumpAndSettle();
     await t.tap(find.text('Age').first);
     await t.pump();
     await t.pump(const Duration(milliseconds: 120));
@@ -34,7 +39,9 @@ void main() {
         .widgetList<SnapshotWidget>(find.byType(SnapshotWidget))
         .where((w) => w.controller.allowSnapshotting)
         .length;
-    expect(still, 2, reason: 'the new screen and the one under it');
+    // Only the screen underneath is a picture: the arriving one stays live
+    // so its content can assemble as it slides in.
+    expect(still, 1, reason: 'the screen under the push');
 
     await t.pumpAndSettle();
     expect(anyStill(t), isFalse, reason: 'live again once it has arrived');
@@ -43,7 +50,7 @@ void main() {
     await t.tap(find.bySemanticsLabel('Back').first);
     await t.pump();
     await t.pump(const Duration(milliseconds: 120));
-    expect(anyStill(t), isTrue, reason: 'going back slides pictures too');
+    expect(anyStill(t), isTrue, reason: 'the screen uncovered is a picture');
     await t.pumpAndSettle();
     expect(anyStill(t), isFalse);
   });

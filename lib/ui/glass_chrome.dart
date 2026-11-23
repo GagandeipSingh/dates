@@ -5,14 +5,14 @@ import 'package:flutter/services.dart';
 
 import 'glass_surface.dart';
 import 'motion.dart';
+import 'one_ui.dart';
 
-/// The app's chrome, drawn with the compass app's glass. These keep the names
-/// and arguments the screens used from liquid_glass_widgets, so swapping the
-/// package out changed no call site.
-///
-/// The compass rule holds: only the FLOATING layer is glass. The bar is a
-/// light blur behind its controls (so a list scrolled under it stays
-/// legible), and the controls on it are the glass.
+/// The app's chrome in One UI's flat material: the screen scaffold, the
+/// compact app bar, the bottom dialog and the strip behind the 3-button
+/// navigation. The names are kept from the glass chrome they replaced, so
+/// no screen had to change its calls. Nothing here blurs or samples the
+/// screen: every bar is solid colour (One UI is fast on small processors
+/// because of it).
 
 enum GlassStatusBarStyle { light, dark }
 
@@ -82,21 +82,28 @@ class GlassScaffold extends StatelessWidget {
       // fills the whole screen and never moves.
       child: Stack(
         children: [
-          if (background != null) Positioned.fill(child: background!),
+          Positioned.fill(
+            child:
+                background ??
+                ColoredBox(color: OnePalette.of(context).background),
+          ),
           Scaffold(
             backgroundColor: Colors.transparent,
             resizeToAvoidBottomInset: true,
             body: content,
           ),
-          const NavButtonBacking(),
+          // A bottom bar paints its own colour on under the system
+          // navigation; the strip is for screens without one.
+          if (bottomBar == null) const NavButtonBacking(),
         ],
       ),
     );
   }
 }
 
-/// A floating top bar: [leading], [title] and [actions] in a 44-pt row under
-/// the status bar, over a soft blur.
+/// A compact One UI app bar: [leading], [title] and [actions] in a row
+/// under the status bar, on the screen's own colour. Keep it to three items
+/// including the title (guide p.16); more go into a ⋮ menu.
 class GlassAppBar extends StatelessWidget {
   const GlassAppBar({
     super.key,
@@ -111,7 +118,7 @@ class GlassAppBar extends StatelessWidget {
   final List<Widget> actions;
   final bool centerTitle;
 
-  static const double barHeight = 44;
+  static const double barHeight = 48;
 
   /// Space between the status bar and the buttons, so they don't touch it.
   static const double gap = 8;
@@ -122,7 +129,6 @@ class GlassAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final top = MediaQuery.paddingOf(context).top;
 
     final row = SizedBox(
@@ -148,106 +154,56 @@ class GlassAppBar extends StatelessWidget {
       ),
     );
 
-    if (MediaQuery.highContrastOf(context)) {
-      return ColoredBox(
-        color: dark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
-        child: Padding(
-          padding: EdgeInsets.only(top: top + gap),
-          child: row,
-        ),
-      );
-    }
+    // A solid bar in the screen's colour, as One UI's compact app bar: the
 
-    // No strip behind the bar: only its buttons are glass, floating over the
-    // background as the compass app's controls do.
-    return Padding(
-      padding: EdgeInsets.only(top: top + gap, bottom: 6),
-      child: row,
+    // content scrolls under its edge, never shows through it.
+
+    return ColoredBox(
+      color: OnePalette.of(context).background,
+
+      child: Padding(
+        padding: EdgeInsets.only(top: top + gap, bottom: 6),
+
+        child: row,
+      ),
     );
   }
 }
 
-/// A glass bottom sheet: on phones it slides up smoothly as an ergonomic
-/// rounded floating card; on larger screens (tablets, foldables, desktop)
-/// it seamlessly presents as a centered floating liquid glass modal card.
-Future<T?> showGlassSheet<T>(
+/// A One UI bottom dialog (guide p.37: dialogs that need an action sit at
+/// the bottom, in reach). A solid popup-coloured card with 26dp corners,
+/// floating 10dp in from the edges with a drag handle. It rises on the
+/// settle spring ([kSettle], 400ms), landing in place without a bounce,
+/// while the dim fades in; its content follows a beat behind (StaggerIn).
+/// It closes quickly on an accelerating ease ([kExitMs]) or with the
+/// finger, which
+/// it follows exactly; a fast flick down closes it from anywhere. Pulled UP
+/// it stretches on rubber and springs back. Instant with reduced motion.
+/// The same on every screen size: a tablet gets it narrower (max 560dp),
+/// still at the bottom. Tall content scrolls inside it.
+///
+/// Every sheet in the app goes through here (test/motion_coverage_test).
+Future<T?> showAppSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
 }) {
-  final isWide = isWideLayout(context);
-  if (isWide) {
-    return showGeneralDialog<T>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withValues(alpha: 0.25),
-      transitionDuration: motion(context, kSpringMs),
-      pageBuilder: (ctx, anim1, anim2) => const SizedBox.shrink(),
-      transitionBuilder: (ctx, anim, secondaryAnim, child) {
-        final curve = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-        final pop = CurvedAnimation(
-          parent: anim,
-          curve: kSpring,
-          reverseCurve: Curves.easeInCubic,
-        );
-        final screenH = MediaQuery.sizeOf(ctx).height;
-        return Center(
-          child: FadeTransition(
-            opacity: curve,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.9, end: 1.0).animate(pop),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 480,
-                  maxHeight: math.min(640, screenH - 32),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GlassSurface(
-                    radius: 34,
-                    thick: true,
-                    // The same glass as the cards and bars, a little more frosted
-                    // so its words read over the list, and a shade deeper so it
-                    // sits above them.
-                    blur: 12,
-                    tint: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF16181C).withValues(alpha: 0.30)
-                        : const Color(0xFFEEF0F4).withValues(alpha: 0.55),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: SingleChildScrollView(child: builder(ctx)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
+  final p = OnePalette.of(context);
   return showModalBottomSheet<T>(
     context: context,
     backgroundColor: Colors.transparent,
     elevation: 0,
-    // A soft dim behind, as iOS sets a sheet apart from the screen under
-    // it; it also keeps the bright controls below from glowing through.
-    barrierColor: Colors.black.withValues(
-      alpha: Theme.of(context).brightness == Brightness.dark ? 0.28 : 0.12,
-    ),
+    barrierColor: Colors.black.withValues(alpha: p.dark ? 0.6 : 0.45),
     isScrollControlled: true,
     useSafeArea: true,
-    // Rises on a soft spring and settles, as an iOS sheet does.
     sheetAnimationStyle: AnimationStyle(
-      duration: motion(context, kSpringMs),
-      reverseCurve: Curves.easeInCubic,
-      reverseDuration: motion(context, 240),
+      duration: motion(context, kSettleMs),
+      reverseCurve: kExit,
+      reverseDuration: motion(context, kExitMs),
     ),
     constraints: const BoxConstraints(maxWidth: 560),
     builder: (ctx) {
       final inset = MediaQuery.viewInsetsOf(ctx).bottom;
+      final q = OnePalette.of(ctx);
       return _SheetSpring(
         child: _SheetStretch(
           child: Padding(
@@ -255,38 +211,46 @@ Future<T?> showGlassSheet<T>(
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
-                child: GlassSurface(
-                  radius: 34,
-                  thick: true,
-                  // The same glass as the cards and bars, a little more frosted
-                  // so its words read over the list, and a shade deeper so it
-                  // sits above them.
-                  blur: 12,
-                  tint: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF16181C).withValues(alpha: 0.30)
-                      : const Color(0xFFEEF0F4).withValues(alpha: 0.55),
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 36,
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              ctx,
-                            ).colorScheme.onSurface.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(3),
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                child: Material(
+                  color: q.popup,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(OneUi.radiusBlock),
+                    side: MediaQuery.highContrastOf(ctx)
+                        ? BorderSide(
+                            color: q.ink.withValues(alpha: 0.7),
+                            width: 1.5,
+                          )
+                        : BorderSide.none,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 36,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: q.sub.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
                         ),
-                      ),
-                      Flexible(
-                        child: SingleChildScrollView(child: builder(ctx)),
-                      ),
-                    ],
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: StaggerIn(
+                              index: 2,
+                              rise: 10,
+                              child: builder(ctx),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -299,28 +263,41 @@ Future<T?> showGlassSheet<T>(
 }
 
 /// Flutter's sheet rises on a fixed decelerate and ignores the curve it is
-/// given, so the sheet arrived flat. This adds the difference between that
-/// curve and the app's spring while it opens: the sheet runs a little past
-/// its resting place and settles back, as an iOS sheet does. A drag or the
-/// close is left alone.
-class _SheetSpring extends StatelessWidget {
+/// given. This adds the difference between that curve and [kSettle] while
+/// it opens, so the sheet arrives on the app's spring: quick off the mark,
+/// landing without a bounce. A drag or the close is left alone,
+/// so the sheet stays under the finger and a flick closes at its speed.
+class _SheetSpring extends StatefulWidget {
   const _SheetSpring({required this.child});
   final Widget child;
 
+  @override
+  State<_SheetSpring> createState() => _SheetSpringState();
+}
+
+class _SheetSpringState extends State<_SheetSpring> {
   // Flutter's own opening curve for a modal sheet (bottom_sheet.dart).
   static const Curve _flutter = Cubic(0.0, 0.0, 0.2, 1.0);
+
+  // Only the OPENING springs. A drag sets the controller by hand and leaves
+  // its direction "forward", so status alone cannot tell a finger from the
+  // open: once the sheet has arrived, the spring is off for good.
+  bool _arrived = false;
 
   @override
   Widget build(BuildContext context) {
     final anim = ModalRoute.of(context)?.animation;
-    if (anim == null || MediaQuery.disableAnimationsOf(context)) return child;
+    if (anim == null || MediaQuery.disableAnimationsOf(context)) {
+      return widget.child;
+    }
     return AnimatedBuilder(
       animation: anim,
-      child: child,
+      child: widget.child,
       builder: (context, child) {
+        if (anim.status == AnimationStatus.completed) _arrived = true;
         final t = anim.value;
-        final dy = anim.status == AnimationStatus.forward
-            ? _flutter.transform(t) - kSpring.transform(t)
+        final dy = !_arrived && anim.status == AnimationStatus.forward
+            ? _flutter.transform(t) - kSettle.transform(t)
             : 0.0;
         return FractionalTranslation(translation: Offset(0, dy), child: child);
       },
@@ -329,8 +306,8 @@ class _SheetSpring extends StatelessWidget {
 }
 
 /// Pulling an open sheet UP stretches it a little on rubber, with more
-/// resistance the further it goes, and it springs back on release, as an
-/// iOS sheet does. Pulling down is the sheet's own drag to close.
+/// resistance the further it goes, and it springs back on release. Pulling
+/// down is the sheet's own drag to close.
 class _SheetStretch extends StatefulWidget {
   const _SheetStretch({required this.child});
   final Widget child;
@@ -349,7 +326,7 @@ class _SheetStretchState extends State<_SheetStretch>
   bool _inner = false;
   late final AnimationController _back = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: kSpringMs),
+    duration: const Duration(milliseconds: kSnapMs),
   );
 
   // Rubber: the first few dp follow the finger, then it stiffens.
@@ -412,7 +389,7 @@ class _SheetStretchState extends State<_SheetStretch>
           builder: (context, child) {
             final dy = _held
                 ? _rubber(_pull)
-                : _from * (1 - kSpring.transform(_back.value));
+                : _from * (1 - kSnap.transform(_back.value));
             return Transform.translate(offset: Offset(0, -dy), child: child);
           },
         ),
@@ -453,12 +430,25 @@ class NavButtonBacking extends StatelessWidget {
       right: 0,
       bottom: 0,
       height: h,
-      child: const IgnorePointer(
-        child: GlassSurface(
-          radius: 0,
-          edgeless: true,
-          thick: true,
-          child: SizedBox.expand(),
+      child: IgnorePointer(
+        // One hairline along the TOP edge, where the strip meets the page,
+        // and nothing along the bottom: the screen's own edge is there.
+        child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                width: 0,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0x33FFFFFF)
+                    : const Color(0x1F000000),
+              ),
+            ),
+          ),
+          child: ColoredBox(
+            color: OnePalette.of(context).background,
+            child: const SizedBox.expand(),
+          ),
         ),
       ),
     );

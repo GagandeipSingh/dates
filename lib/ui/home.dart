@@ -1,11 +1,12 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../logic/date_math.dart';
 import '../state/settings.dart';
+import '../state/today.dart';
 import 'glass_surface.dart';
-import 'glass_tabs.dart';
+import 'date_dock.dart';
 import 'kit.dart';
 import 'page_motion.dart';
 import 'scale.dart';
@@ -19,7 +20,17 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int tab = 0;
-  static const titles = ['Today', 'Tools', 'Settings'];
+
+  /// Fired when a tab's dock item is tapped while it is open.
+  final _top = [for (var i = 0; i < 3; i++) ValueNotifier<int>(0)];
+
+  @override
+  void dispose() {
+    for (final t in _top) {
+      t.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,47 +46,57 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Widget _scaffold(Pal p) {
+    // Each tab is its own screen with its own One UI app bar, titled with
+    // the tab's name (guide p.31: no separate app title over main tabs).
+    // The tabs sit in the floating bottom navigation, in thumb reach.
     return GlassScaffold(
       background: const GradientBackground(),
       statusBarStyle: p.dark
           ? GlassStatusBarStyle.light
           : GlassStatusBarStyle.dark,
-      appBar: GlassAppBar(
-        title: Text(
-          titles[tab],
-          style: TextStyle(
-            color: p.ink,
-            fontSize: 17.sp,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      // The compass app's sheet glass as a floating capsule, with a pill
-      // that slides under the selected tab.
-      bottomBarHeight: 64.dp,
+      bottomBarHeight: DateDock.height,
+      // At launch the dock rises into place from below the screen on the
+      // settle spring, once (its key never changes).
       bottomBar: SpringIn(
         key: const ValueKey('tabs'),
         from: Offset(0, 110.dp),
-        child: GlassTabs(
+        // The date dock: Today | Tools | Settings, the open tab a pill on
+        // the left, Today's icon a live calendar. Tab indexes are Today 0,
+        // Tools 1, Settings 2; Today is the default.
+        child: DateDockHost(
           selected: tab,
           onSelected: (i) => setState(() => tab = i),
+          onReselect: (i) => _top[i].value++,
           items: const [
-            (CupertinoIcons.calendar_today, 'Today'),
-            (CupertinoIcons.square_grid_2x2_fill, 'Tools'),
-            (CupertinoIcons.gear_alt_fill, 'Settings'),
+            DockItem(tab: 0, label: 'Today', kind: DockIconKind.today),
+            DockItem(
+              tab: 1,
+              label: 'Tools',
+              icon: PhosphorIconsFill.stack,
+              activeIcon: PhosphorIconsFill.stack,
+              kind: DockIconKind.wiggle,
+            ),
+            DockItem(
+              tab: 2,
+              label: 'Settings',
+              icon: PhosphorIconsFill.gearSix,
+              activeIcon: PhosphorIconsFill.gearSix,
+              kind: DockIconKind.turn,
+            ),
           ],
         ),
       ),
-      // Only the visible tab is built (a glass surface in an offstage tab is
-      // still drawn), and it switches instantly, as an iOS tab bar does: the
-      // bar's own indicator is the animation.
-      // The new tab rises into place on a soft spring: moved, never faded,
-      // so its glass never flashes white.
-      body: SpringIn(
-        key: ValueKey(tab),
-        from: Offset(0, 28.dp),
-        soft: true,
-        child: const [TodayTab(), ToolsTab(), SettingsTab()][tab],
+      // Each tab is built on first visit and then kept, so its scroll
+      // position survives a switch; a switch is a short fade-through (the
+      // dock's blob stretches across at the same time). Tapping the open
+      // tab again scrolls it back to its top.
+      body: FadeThroughTabs(
+        index: tab,
+        count: 3,
+        builder: (context, i) => ScrollToTop(
+          signal: _top[i],
+          child: const [TodayTab(), ToolsTab(), SettingsTab()][i],
+        ),
       ),
     );
   }
@@ -92,15 +113,23 @@ class TodayTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
+    // Rebuilt when the day turns while the app is open (TodayScope).
+    final now = TodayScope.now(context);
     final isWide = pageColumns(context, minColumn: 380) > 1;
+    // The calendar's week rows are tall where the window is (an unfolded
+    // fold) and shorter on a landscape tablet or a desktop window, so the
+    // page ends above the dock there instead of running under it.
+    final height = MediaQuery.sizeOf(context).height;
+    final wideRow = 52 - ((790 - height) / 6).clamp(0.0, 20.0);
+    // Six jumps from today beside a tall calendar, four beside a short one.
+    final tall = height >= 760;
     // On a wide screen the rings move beside the calendar, so the two
     // columns come out about the same height without stretching a card.
     final left = [
       _DateHeader(now: now),
       SizedBox(height: 18.dp),
       if (!isWide) ...[_Rings(now: now), SizedBox(height: 12.dp)],
-      _MonthCard(now: now, row: isWide ? 52 : 36),
+      _MonthCard(now: now, row: isWide ? wideRow : 36),
     ];
     final right = [
       const SectionTitle('Coming up'),
@@ -113,7 +142,7 @@ class TodayTab extends StatelessWidget {
         Expanded(
           child: _QuickDates(
             today: DateTime(now.year, now.month, now.day),
-            more: true,
+            more: tall,
           ),
         ),
       ],
@@ -123,8 +152,8 @@ class TodayTab extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: contentMaxWidth(context)),
         child: PageScroll(
+          title: 'Today',
           padding: pagePadding(context, tabBar: true),
-          fit: true,
           children: isWide
               ? [
                   IntrinsicHeight(
@@ -155,42 +184,48 @@ class TodayTab extends StatelessWidget {
   }
 }
 
-/// The date as type on the page itself, no card: the day of the week in
-/// the accent, the date large, and one quiet line of where it sits.
+/// Today's brief (One UI's Now Brief card): the day of the week, the date
+/// large, where it sits in the year, how far the weekend is, and the two
+/// tools most often reached for from today as quick actions.
 class _DateHeader extends StatelessWidget {
   const _DateHeader({required this.now});
   final DateTime now;
 
   @override
   Widget build(BuildContext context) {
-    final p = Pal.of(context);
     final s = SettingsScope.of(context);
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 6.dp),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Caption(DateFormat('EEEE').format(now), color: p.accent),
-          SizedBox(height: 4.dp),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              DateFormat('d MMMM').format(now),
-              style: TextStyle(
-                color: p.ink,
-                fontSize: 40.sp,
-                height: 1.1,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -1,
-              ),
-            ),
+    final today = DateTime(now.year, now.month, now.day);
+    final toWeekend = (DateTime.saturday - today.weekday) % 7;
+    final weekend = today.weekday >= DateTime.saturday
+        ? 'It is the weekend'
+        : toWeekend == 1
+        ? 'The weekend starts tomorrow'
+        : 'The weekend is $toWeekend days away';
+    void open(Widget page) =>
+        Navigator.of(context).push(AppPageRoute(builder: (_) => page));
+    // When the day turns with the app open, the card rolls over to the new
+    // day like a calendar leaf (TodayScope rebuilds it).
+    return RollSwitcher(
+      value: today,
+      child: BriefCard(
+        now: now,
+        eyebrow: DateFormat('EEEE').format(now),
+        headline: DateFormat('d MMMM y').format(now),
+        lines: [
+          'Week ${weekOfYear(now, mondayFirst: s.mondayFirst)}'
+              '  ·  Day ${dayOfYear(now)} of ${daysInYear(now.year)}',
+          weekend,
+        ],
+        actions: [
+          BriefAction(
+            label: 'Add or subtract',
+            icon: PhosphorIconsFill.calculator,
+            onTap: () => open(const AddScreen()),
           ),
-          SizedBox(height: 4.dp),
-          Text(
-            '${now.year}  ·  Week ${weekOfYear(now, mondayFirst: s.mondayFirst)}'
-            '  ·  Day ${dayOfYear(now)}',
-            style: TextStyle(color: p.sub, fontSize: 14.sp),
+          BriefAction(
+            label: 'Between dates',
+            icon: PhosphorIconsFill.hourglassMedium,
+            onTap: () => open(const BetweenScreen()),
           ),
         ],
       ),
@@ -210,7 +245,14 @@ class _Rings extends StatelessWidget {
     final yearLeft = daysInYear(now.year) - dayOfYear(now);
     Widget half(String title, double v, String left) => Row(
       children: [
-        _Ring(value: v, size: 58.dp),
+        // Fills from empty the first time Today is shown in a run.
+        RepaintBoundary(
+          child: FillOnce(
+            id: 'today-ring:$title',
+            value: v,
+            builder: (context, x) => _Ring(value: x, size: 58.dp),
+          ),
+        ),
         SizedBox(width: 12.dp),
         Expanded(
           child: Column(
@@ -490,28 +532,28 @@ class _ComingUp extends StatelessWidget {
     // (icon, colour, days away, what, when)
     final items = <(IconData, Color, int, String, String)>[
       (
-        CupertinoIcons.sun_max_fill,
+        PhosphorIconsFill.sun,
         const Color(0xFFF08A1D),
         weekend ? 0 : until(sat),
         'Weekend',
         weekend ? 'Today' : fmt.format(sat),
       ),
       (
-        CupertinoIcons.calendar,
+        PhosphorIconsFill.calendarBlank,
         const Color(0xFF1E7BF2),
         until(nextMonth),
         DateFormat('MMMM').format(nextMonth),
         fmt.format(nextMonth),
       ),
       (
-        CupertinoIcons.sparkles,
+        PhosphorIconsFill.sparkle,
         const Color(0xFFE5407F),
         until(newYear),
         'New Year',
         DateFormat('d MMM y').format(newYear),
       ),
       (
-        CupertinoIcons.star_fill,
+        PhosphorIconsFill.star,
         const Color(0xFF6A4CF5),
         until(leap),
         'Leap day',
@@ -519,21 +561,21 @@ class _ComingUp extends StatelessWidget {
       ),
     ];
     Widget card((IconData, Color, int, String, String) it) => GlassSurface(
-      radius: 16.dp,
-      padding: EdgeInsets.fromLTRB(12.dp, 12.dp, 10.dp, 12.dp),
+      radius: 22.dp,
+      padding: EdgeInsets.fromLTRB(14.dp, 15.dp, 12.dp, 15.dp),
       child: Row(
         children: [
           Container(
-            width: 30.dp,
-            height: 30.dp,
+            width: 36.dp,
+            height: 36.dp,
             decoration: BoxDecoration(
               color: it.$2.withValues(alpha: p.dark ? 0.2 : 0.13),
-              borderRadius: BorderRadius.circular(9.dp),
+              borderRadius: BorderRadius.circular(11.dp),
             ),
             alignment: Alignment.center,
-            child: Icon(it.$1, size: 16.dp, color: it.$2),
+            child: Icon(it.$1, size: 19.dp, color: it.$2),
           ),
-          SizedBox(width: 10.dp),
+          SizedBox(width: 12.dp),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,13 +583,15 @@ class _ComingUp extends StatelessWidget {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(
+                  // Ticks down in place when the day turns: only the
+                  // figure counts, the card around it stays still.
+                  child: CountText(
                     it.$3 == 0
                         ? 'Today'
                         : '${n(it.$3)} ${it.$3 == 1 ? 'day' : 'days'}',
                     style: TextStyle(
                       color: p.ink,
-                      fontSize: 16.sp,
+                      fontSize: 18.5.sp,
                       fontWeight: FontWeight.w700,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
@@ -555,7 +599,7 @@ class _ComingUp extends StatelessWidget {
                 ),
                 Text(
                   it.$4,
-                  style: TextStyle(color: p.sub, fontSize: 12.sp),
+                  style: TextStyle(color: p.sub, fontSize: 13.5.sp),
                 ),
               ],
             ),
@@ -607,42 +651,42 @@ final _tools = <_Tool>[
   _Tool(
     'Between Dates',
     'Time between any two dates',
-    CupertinoIcons.hourglass,
+    PhosphorIconsFill.hourglassMedium,
     const Color(0xFF1E7BF2),
     () => const BetweenScreen(),
   ),
   _Tool(
     'Age',
     'Exact age, next birthday and totals',
-    Icons.cake_rounded,
+    PhosphorIconsFill.cake,
     const Color(0xFFE5407F),
     () => const AgeScreen(),
   ),
   _Tool(
     'Add or Subtract',
     'Move a date forward or back',
-    Icons.calculate_rounded,
+    PhosphorIconsFill.calculator,
     const Color(0xFFF08A1D),
     () => const AddScreen(),
   ),
   _Tool(
     'Working Days',
     'Business days between two dates',
-    CupertinoIcons.briefcase_fill,
+    PhosphorIconsFill.briefcase,
     const Color(0xFF14A37F),
     () => const WorkingDaysScreen(),
   ),
   _Tool(
     'Weekday',
     'The day of the week for any date',
-    CupertinoIcons.calendar,
+    PhosphorIconsFill.calendarBlank,
     const Color(0xFF6A4CF5),
     () => const WeekdayScreen(),
   ),
   _Tool(
     'Leap Year',
     'Check any year for 29 February',
-    CupertinoIcons.calendar_badge_plus,
+    PhosphorIconsFill.calendarPlus,
     const Color(0xFFF2564B),
     () => const LeapYearScreen(),
     glyph: '29',
@@ -665,7 +709,7 @@ class ToolsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Pal.of(context);
     final settings = SettingsScope.of(context);
-    final now = DateTime.now();
+    final now = TodayScope.now(context);
     final today = DateTime(now.year, now.month, now.day);
     final newYear = DateTime(now.year + 1, 1, 1);
     final toNewYear = newYear.difference(today).inDays;
@@ -681,16 +725,16 @@ class ToolsTab extends StatelessWidget {
     final short = DateFormat('d MMM');
 
     Widget chip(String text, Color c, {bool on = true}) => Container(
-      padding: EdgeInsets.symmetric(horizontal: 6.dp, vertical: 2.dp),
+      padding: EdgeInsets.symmetric(horizontal: 7.dp, vertical: 3.dp),
       decoration: BoxDecoration(
         color: on ? c.withValues(alpha: p.dark ? 0.22 : 0.14) : p.faint,
-        borderRadius: BorderRadius.circular(7.dp),
+        borderRadius: BorderRadius.circular(8.dp),
       ),
       child: Text(
         text,
         style: TextStyle(
           color: on ? c : p.sub,
-          fontSize: 10.sp,
+          fontSize: 11.5.sp,
           fontWeight: FontWeight.w500,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
@@ -706,7 +750,7 @@ class ToolsTab extends StatelessWidget {
         children: [
           chip('Today', c),
           SizedBox(
-            width: 52.dp,
+            width: 58.dp,
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 4.dp),
               child: Row(
@@ -722,7 +766,7 @@ class ToolsTab extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Icon(CupertinoIcons.chevron_right, size: 10.dp, color: c),
+                  Icon(PhosphorIconsBold.caretRight, size: 11.dp, color: c),
                 ],
               ),
             ),
@@ -743,8 +787,8 @@ class ToolsTab extends StatelessWidget {
           d = DateTime(d.year, d.month, d.day + 1)
         )
           Container(
-            width: 7.dp,
-            height: 7.dp,
+            width: 8.dp,
+            height: 8.dp,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: workdays.contains(d.weekday) ? c : p.faint,
@@ -767,7 +811,7 @@ class ToolsTab extends StatelessWidget {
               '+30',
               style: TextStyle(
                 color: p.sub,
-                fontSize: 11.sp,
+                fontSize: 12.5.sp,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -789,8 +833,8 @@ class ToolsTab extends StatelessWidget {
                 final wd = (first - 1 + i) % 7 + 1;
                 final on = wd == now.weekday;
                 return Container(
-                  width: 16.dp,
-                  height: 16.dp,
+                  width: 19.dp,
+                  height: 19.dp,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -802,7 +846,7 @@ class ToolsTab extends StatelessWidget {
                     ).format(DateTime(2024, 1, wd)).substring(0, 1),
                     style: TextStyle(
                       color: on ? Colors.white : p.sub,
-                      fontSize: 10.5.sp,
+                      fontSize: 12.sp,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -846,7 +890,11 @@ class ToolsTab extends StatelessWidget {
     // A phone or an unfolded foldable: one column. A tablet: two. A
     // desktop window: three, so the six tools sit in one band.
     final big = isWideLayout(context);
+    // A landscape tablet or desktop window is short: the tiles tighten a
+    // little so the From today band ends above the dock.
+    final snug = big && MediaQuery.sizeOf(context).height < 760;
     Widget tile(int i) => _ToolTile(
+      snug: snug,
       tool: _tools[i],
       value: live[i].$1,
       note: live[i].$2,
@@ -910,8 +958,8 @@ class ToolsTab extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: contentMaxWidth(context)),
         child: PageScroll(
+          title: 'Tools',
           padding: pagePadding(context, tabBar: true),
-          fit: true,
           children: big
               ? [
                   band([for (final g in _groups) group(g)]),
@@ -960,14 +1008,14 @@ class _QuickDates extends StatelessWidget {
         children: [
           Text(
             j.$1,
-            style: TextStyle(color: p.sub, fontSize: 11.5.sp),
+            style: TextStyle(color: p.sub, fontSize: 12.5.sp),
           ),
           SizedBox(height: 2.dp),
           Text(
             fmt.format(j.$2),
             style: TextStyle(
               color: p.ink,
-              fontSize: 13.sp,
+              fontSize: 14.5.sp,
               fontWeight: FontWeight.w500,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -980,7 +1028,7 @@ class _QuickDates extends StatelessWidget {
       label: 'Add or Subtract',
       onTap: () => Navigator.of(
         context,
-      ).push(GlassPageRoute(builder: (_) => const AddScreen())),
+      ).push(AppPageRoute(builder: (_) => const AddScreen())),
       builder: (down) => GlassSurface(
         radius: 16.dp,
         lit: down,
@@ -1014,6 +1062,7 @@ class _ToolTile extends StatelessWidget {
     required this.note,
     required this.picture,
     this.big = false,
+    this.snug = false,
   });
   final _Tool tool;
   final String value, note;
@@ -1022,6 +1071,9 @@ class _ToolTile extends StatelessWidget {
   /// Larger type for a tablet, fold or desktop window.
   final bool big;
 
+  /// Tighter spacing, for a short wide window.
+  final bool snug;
+
   @override
   Widget build(BuildContext context) {
     final p = Pal.of(context);
@@ -1029,13 +1081,13 @@ class _ToolTile extends StatelessWidget {
     return GlassPress(
       label: '${t.title}. $value $note',
       onTap: () =>
-          Navigator.of(context).push(GlassPageRoute(builder: (_) => t.page())),
+          Navigator.of(context).push(AppPageRoute(builder: (_) => t.page())),
       builder: (down) => GlassSurface(
-        radius: 16.dp,
+        radius: 18.dp,
         lit: down,
         padding: big
-            ? EdgeInsets.all(16.dp)
-            : EdgeInsets.fromLTRB(12.dp, 12.dp, 12.dp, 13.dp),
+            ? EdgeInsets.all(snug ? 13.dp : 16.dp)
+            : EdgeInsets.fromLTRB(14.dp, 14.dp, 14.dp, 15.dp),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1045,15 +1097,15 @@ class _ToolTile extends StatelessWidget {
                   color: t.color,
                   icon: t.icon,
                   glyph: t.glyph,
-                  size: big ? 32.dp : 24.dp,
+                  size: big ? 32.dp : 28.dp,
                 ),
-                SizedBox(width: 9.dp),
+                SizedBox(width: 10.dp),
                 Expanded(
                   child: Text(
                     t.title,
                     style: TextStyle(
                       color: p.ink,
-                      fontSize: big ? 15.sp : 12.5.sp,
+                      fontSize: big ? 15.sp : 14.sp,
                       fontWeight: FontWeight.w500,
                       height: 1.15,
                     ),
@@ -1061,7 +1113,7 @@ class _ToolTile extends StatelessWidget {
                 ),
               ],
             ),
-            SizedBox(height: 14.dp),
+            SizedBox(height: snug ? 10.dp : 14.dp),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
@@ -1069,7 +1121,7 @@ class _ToolTile extends StatelessWidget {
                 value,
                 style: TextStyle(
                   color: p.ink,
-                  fontSize: big ? 26.sp : 17.sp,
+                  fontSize: big ? 26.sp : 20.sp,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.2,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -1078,9 +1130,9 @@ class _ToolTile extends StatelessWidget {
             ),
             Text(
               note,
-              style: TextStyle(color: p.sub, fontSize: big ? 13.sp : 11.sp),
+              style: TextStyle(color: p.sub, fontSize: big ? 13.sp : 12.5.sp),
             ),
-            SizedBox(height: 14.dp),
+            SizedBox(height: snug ? 10.dp : 14.dp),
             const Spacer(),
             picture,
           ],
@@ -1157,68 +1209,71 @@ class _ToolRowState extends State<_ToolRow> {
           onTapUp: (_) => setState(() => down = false),
           onTap: () => Navigator.of(
             context,
-          ).push(GlassPageRoute(builder: (_) => t.page())),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            margin: EdgeInsets.symmetric(horizontal: 6.dp),
-            padding: EdgeInsets.symmetric(horizontal: 10.dp, vertical: 16.dp),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18.dp),
-              color: down ? p.faint : Colors.transparent,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 40.dp,
-                  height: 40.dp,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12.dp),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color.lerp(t.color, Colors.white, 0.18)!,
-                        t.color,
+          ).push(AppPageRoute(builder: (_) => t.page())),
+          child: PressScale(
+            child: AnimatedContainer(
+              duration: motion(context, kFadeMs),
+              curve: kFade,
+              margin: EdgeInsets.symmetric(horizontal: 6.dp),
+              padding: EdgeInsets.symmetric(horizontal: 10.dp, vertical: 16.dp),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18.dp),
+                color: down ? p.faint : Colors.transparent,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40.dp,
+                    height: 40.dp,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12.dp),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color.lerp(t.color, Colors.white, 0.18)!,
+                          t.color,
+                        ],
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: t.glyph == null
+                        ? Icon(t.icon, color: Colors.white, size: 21.dp)
+                        : Text(
+                            t.glyph!,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: t.glyph!.length == 1 ? 26.sp : 17.sp,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                              height: 1,
+                            ),
+                          ),
+                  ),
+                  SizedBox(width: 14.dp),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t.title,
+                          style: TextStyle(
+                            color: p.ink,
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: 2.dp),
+                        Text(
+                          t.subtitle,
+                          style: TextStyle(color: p.sub, fontSize: 12.5.sp),
+                        ),
                       ],
                     ),
                   ),
-                  alignment: Alignment.center,
-                  child: t.glyph == null
-                      ? Icon(t.icon, color: Colors.white, size: 21.dp)
-                      : Text(
-                          t.glyph!,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: t.glyph!.length == 1 ? 26.sp : 17.sp,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
-                            height: 1,
-                          ),
-                        ),
-                ),
-                SizedBox(width: 14.dp),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        t.title,
-                        style: TextStyle(
-                          color: p.ink,
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(height: 2.dp),
-                      Text(
-                        t.subtitle,
-                        style: TextStyle(color: p.sub, fontSize: 12.5.sp),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(CupertinoIcons.chevron_right, size: 16.dp, color: p.sub),
-              ],
+                  Icon(PhosphorIconsBold.caretRight, size: 16.dp, color: p.sub),
+                ],
+              ),
             ),
           ),
         ),
@@ -1242,7 +1297,10 @@ class SettingsTab extends StatelessWidget {
     // Every colour on one row, spread edge to edge: a Wrap left the last
     // one alone on a second row on a fold. The dot shrinks only if the row
     // could not otherwise hold all of them.
-    final maxSwatch = isWide ? 46.dp : 40.dp;
+    // A short wide window (landscape tablet, desktop) tightens a little so
+    // the page ends above the dock.
+    final short = MediaQuery.sizeOf(context).height < 760;
+    final maxSwatch = isWide ? 52.dp : 40.dp;
     // Flexible + AspectRatio rather than a LayoutBuilder: this row sits in
     // an IntrinsicHeight on wide screens, which a LayoutBuilder cannot.
     final swatches = Builder(
@@ -1266,29 +1324,32 @@ class SettingsTab extends StatelessWidget {
                         onTap: () => s.accentIndex = i,
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOutCubic,
-                            padding: EdgeInsets.all(3.dp),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: i == s.accentIndex
-                                    ? accents[i].color
-                                    : Colors.transparent,
-                                width: 2.2.dp,
-                              ),
-                            ),
-                            child: DecoratedBox(
+                          // Pressed like any tile; the ring eases in.
+                          child: PressScale(
+                            child: AnimatedContainer(
+                              duration: motion(context, kFadeMs),
+                              curve: kFade,
+                              padding: EdgeInsets.all(3.dp),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    accents[i].light[1],
-                                    accents[i].color,
-                                  ],
+                                border: Border.all(
+                                  color: i == s.accentIndex
+                                      ? accents[i].color
+                                      : Colors.transparent,
+                                  width: 2.2.dp,
+                                ),
+                              ),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      accents[i].light[1],
+                                      accents[i].color,
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -1304,6 +1365,69 @@ class SettingsTab extends StatelessWidget {
         );
       },
     );
+
+    final switches = <Widget>[
+      SwitchRow(
+        label: '24-hour time',
+        hint: s.time(DateTime(2026, 1, 1, 17, 30)),
+        value: s.use24h,
+        onChanged: (v) => s.use24h = v,
+      ),
+      SwitchRow(
+        label: 'Week starts on Monday',
+        hint: s.mondayFirst
+            ? 'ISO week numbers'
+            : 'Sunday first, US week numbers',
+        value: s.mondayFirst,
+        onChanged: (v) => s.mondayFirst = v,
+      ),
+      SwitchRow(
+        label: 'Share button',
+        hint: 'Show Share under results',
+        value: s.showShare,
+        onChanged: (v) => s.showShare = v,
+      ),
+      // Android only: the launcher icon follows today's date. Off keeps
+      // one fixed entry that app pairs and routines can name.
+      if (dateIconSupported)
+        SwitchRow(
+          key: const ValueKey('settings/daily-icon'),
+          label: 'Daily date icon',
+          hint: 'Off: fixed icon, keeps app pairs',
+          value: s.dailyIcon,
+          onChanged: (v) => s.dailyIcon = v,
+        ),
+    ];
+    // A phone lists the switches; a wide page sets them two to a row, so
+    // the card is half as tall and the page fits above the dock.
+    final prefs = isWide
+        ? Column(
+            children: [
+              for (var i = 0; i < switches.length; i += 2) ...[
+                if (i > 0) const Hairline(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: switches[i]),
+                    Gap(32.dp),
+                    Expanded(
+                      child: i + 1 < switches.length
+                          ? switches[i + 1]
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          )
+        : Column(
+            children: [
+              for (var i = 0; i < switches.length; i++) ...[
+                if (i > 0) const Hairline(),
+                switches[i],
+              ],
+            ],
+          );
 
     final lookColumn = [
       const SectionTitle('Appearance'),
@@ -1332,15 +1456,10 @@ class SettingsTab extends StatelessWidget {
                 ),
               ],
             ),
-            SizedBox(height: 14.dp),
-            // On a wide page the card is stretched to the Date format card
-            // beside it: the swatches sit in the middle of that space.
-            if (isWide)
-              Expanded(
-                child: Align(alignment: Alignment.centerLeft, child: swatches),
-              )
-            else
-              swatches,
+            SizedBox(height: isWide ? 20.dp : 14.dp),
+            // Never stretched to the Date format card beside it: that left
+            // a band of nothing between the label and the swatches.
+            swatches,
           ],
         ),
       ),
@@ -1364,7 +1483,7 @@ class SettingsTab extends StatelessWidget {
                     child: SizedBox(
                       // A touch shorter beside the Colour card on a wide page, so the
                       // two cards come out the same height without padding.
-                      height: isWide ? 42.dp : 48.dp,
+                      height: isWide ? (short ? 40.dp : 42.dp) : 48.dp,
                       child: Row(
                         children: [
                           Expanded(
@@ -1375,7 +1494,7 @@ class SettingsTab extends StatelessWidget {
                           ),
                           if (f == s.dateFormat)
                             Icon(
-                              CupertinoIcons.checkmark_alt,
+                              PhosphorIconsBold.check,
                               color: p.accent,
                               size: 20.dp,
                             ),
@@ -1389,83 +1508,46 @@ class SettingsTab extends StatelessWidget {
         ),
       ),
       const SectionTitle('Preferences'),
-      Pane(
-        child: Column(
-          children: [
-            SwitchRow(
-              label: '24-hour time',
-              hint: s.time(DateTime(2026, 1, 1, 17, 30)),
-              value: s.use24h,
-              onChanged: (v) => s.use24h = v,
-            ),
-            const Hairline(),
-            SwitchRow(
-              label: 'Week starts on Monday',
-              hint: s.mondayFirst
-                  ? 'ISO week numbers'
-                  : 'Sunday first, US week numbers',
-              value: s.mondayFirst,
-              onChanged: (v) => s.mondayFirst = v,
-            ),
-            const Hairline(),
-            SwitchRow(
-              label: 'Share button',
-              hint: 'Show Share under results',
-              value: s.showShare,
-              onChanged: (v) => s.showShare = v,
-            ),
-          ],
-        ),
-      ),
+      Pane(child: prefs),
     ];
 
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: contentMaxWidth(context)),
         child: PageScroll(
+          title: 'Settings',
           padding: pagePadding(context, tabBar: true),
-          // Wide: scale to fit like Today and Tools, so the footer never
-          // ends up behind the tab bar on a landscape tablet.
-          fit: true,
           children: [
             if (isWide) ...[
-              // Two columns of equal height, their last cards stretched so
-              // both end level; Preferences runs full width beneath.
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          ...lookColumn.sublist(0, lookColumn.length - 1),
-                          Expanded(child: lookColumn.last),
-                        ],
-                      ),
+              // Two equal columns, tops aligned, each card at its own
+              // height; Preferences runs full width beneath.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: lookColumn,
                     ),
-                    Gap(20.dp),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          preferencesColumn[0],
-                          Expanded(child: preferencesColumn[1]),
-                        ],
-                      ),
+                  ),
+                  Gap(20.dp),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: preferencesColumn.sublist(0, 2),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               ...preferencesColumn.sublist(2),
             ] else ...[
               ...lookColumn,
               ...preferencesColumn,
             ],
-            Gap(24.dp),
+            Gap(isWide ? 8.dp : 24.dp),
             Center(
               child: Text(
-                'Dates · ${dayOfYear(DateTime.now())} days into ${DateTime.now().year}',
+                'Dates · ${dayOfYear(TodayScope.now(context))} days into ${TodayScope.now(context).year}',
                 style: TextStyle(color: p.sub, fontSize: 12.sp),
               ),
             ),

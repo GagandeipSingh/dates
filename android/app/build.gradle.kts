@@ -61,3 +61,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // DateIconTest (plain JVM): the date-to-icon mapping and the manifest.
+    testImplementation("junit:junit:4.13.2")
+}

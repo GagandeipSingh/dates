@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -8,14 +9,16 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../state/settings.dart';
-import 'ambient.dart';
 import 'glass_chrome.dart';
+import 'date_dock.dart';
 import 'glass_surface.dart';
 import 'motion.dart';
+import 'one_ui.dart';
 import 'scale.dart';
 
 export 'glass_chrome.dart';
 export 'motion.dart';
+export 'one_ui.dart';
 
 final numberFmt = NumberFormat.decimalPattern();
 String n(num v) => numberFmt.format(v);
@@ -42,9 +45,14 @@ class Pal {
   /// Coral still reads coral and Graphite still reads slate.
   late final Color accent = _readable(accentRaw, dark);
 
-  Color get ink => dark ? Colors.white : const Color(0xFF14151A);
-  Color get sub => dark ? const Color(0xB3FFFFFF) : const Color(0x9914151A);
-  Color get faint => dark ? const Color(0x1FFFFFFF) : const Color(0x1414151A);
+  /// One UI's text and line colours (one_ui.dart).
+  late final OnePalette one = OnePalette.forBrightness(
+    dark ? Brightness.dark : Brightness.light,
+    accent: accentRaw,
+  );
+  Color get ink => one.ink;
+  Color get sub => one.sub;
+  Color get faint => one.divider;
 
   static Color _readable(Color c, bool dark) {
     if (!dark) return c;
@@ -60,25 +68,31 @@ class Pal {
   }
 }
 
-/// The colour field behind every screen. Glass refracts and blurs what is
-/// behind it, so a flat background makes it read as plain grey: a soft,
-/// multi-stop diagonal gradient is what lets the liquid effect show.
+/// The field behind every screen: One UI's flat grey (light) or near-black
+/// (dark). The name is kept from the gradient it replaced; a flat field is
+/// what makes the focus blocks stand out (guide p.8) and costs nothing.
 class GradientBackground extends StatelessWidget {
   const GradientBackground({super.key});
 
   @override
   Widget build(BuildContext context) =>
-      AmbientBackground(accent: SettingsScope.of(context).accent.color);
+      ColoredBox(color: Pal.of(context).one.background);
 }
 
-/// Padding that clears the glass app bar on top and the tab bar below.
+/// Padding for a page's content under its One UI app bar ([PageScroll]
+/// draws the bar): blocks sit [OneUi.blockInset] from the edges, and the
+/// foot clears the bottom navigation or toolbar.
 EdgeInsets pagePadding(BuildContext context, {bool tabBar = false}) {
   final mq = MediaQuery.paddingOf(context);
   return EdgeInsets.fromLTRB(
-    16,
-    mq.top + GlassAppBar.gap + GlassAppBar.barHeight + 14,
-    16,
-    mq.bottom + (tabBar ? 64.dp + 14.dp + 20.dp : 28.dp),
+    OneUi.blockInset,
+    4,
+    OneUi.blockInset,
+    // Over the dock: 16dp clear on a phone, 4 on a wide window, where the
+    // page is short of height and the dock floats far from its corners.
+    tabBar
+        ? DateDock.footprint(context) + (isWideLayout(context) ? 4 : 16)
+        : mq.bottom + 28,
   );
 }
 
@@ -92,10 +106,22 @@ class PageScroll extends StatelessWidget {
     required this.children,
     this.top = false,
     this.fill = false,
-    this.fit = false,
+    this.title,
+    this.leading,
+    this.actions = const [],
+    this.startCollapsed = true,
   });
   final EdgeInsets padding;
   final List<Widget> children;
+
+  /// The screen's One UI app bar: a large title that collapses as the page
+  /// scrolls ([OneScrollPage]). A screen without one draws its own.
+  final String? title;
+  final Widget? leading;
+  final List<Widget> actions;
+
+  /// A second-depth screen: opens with the bar collapsed (guide p.23).
+  final bool startCollapsed;
 
   /// Keep the page under its title on a wide screen too. A dense page
   /// (Today, Tools) floating in the middle leaves a band of nothing
@@ -107,13 +133,58 @@ class PageScroll extends StatelessWidget {
   /// the screen instead of sitting small in it.
   final bool fill;
 
-  /// On a wide screen, never run under the tab bar: a page taller than the
-  /// window (a short 1280 x 720 desktop) is scaled down to fit between the
-  /// title and the bar, centred. For pages that are one screen by design.
-  final bool fit;
+  /// The page's content assembling as it arrives: each top-level block
+  /// rises and fades in a beat after the one above it (StaggerIn), once,
+  /// when the screen is first built. A block that is a layout instruction
+  /// (Expanded, Spacer) is left as it is.
+  List<Widget> get _kids => [
+    for (var i = 0; i < children.length; i++)
+      children[i] is ParentDataWidget
+          ? children[i]
+          : StaggerIn(index: i, child: children[i]),
+  ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => StaggerScope(child: _page(context));
+
+  Widget _page(BuildContext context) {
+    final t = title;
+    if (t == null) return _content(context);
+    final wide = isWideLayout(context);
+    if (!wide || top) {
+      return OneScrollPage(
+        title: t,
+        leading: leading,
+        actions: actions,
+        startCollapsed: startCollapsed,
+        slivers: [
+          // Built whole, as the column it was: these pages are a screen or
+          // two of cards, and a lazy list left rows unbuilt below the
+          // expanded title (focus, find and scroll-to could not reach them).
+          SliverPadding(
+            padding: padding,
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _kids,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    // The wide layouts size themselves to the window (centred, fitted or
+    // filled): the bar stays collapsed above them and they take the rest.
+    return OneScrollPage(
+      title: t,
+      leading: leading,
+      actions: actions,
+      expandable: false,
+      slivers: [SliverFillRemaining(child: _content(context))],
+    );
+  }
+
+  Widget _content(BuildContext context) {
     final wide = isWideLayout(context);
     if (wide && fill) {
       return LayoutBuilder(
@@ -126,7 +197,7 @@ class PageScroll extends StatelessWidget {
             child: IntrinsicHeight(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children,
+                children: _kids,
               ),
             ),
           ),
@@ -134,7 +205,7 @@ class PageScroll extends StatelessWidget {
       );
     }
     if (!wide || top) {
-      return ListView(padding: padding, children: children);
+      return ListView(padding: padding, children: _kids);
     }
     // Centre between the page title and the top of the tab bar. The top
     // padding reserves the whole title bar, whose text sits high in it, so
@@ -144,24 +215,9 @@ class PageScroll extends StatelessWidget {
       top: math.max(0.0, padding.top - lift),
       bottom: padding.bottom + lift,
     );
-    if (fit) {
-      return LayoutBuilder(
-        builder: (context, c) => Padding(
-          padding: centred,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: SizedBox(
-              width: math.max(0.0, c.maxWidth - centred.horizontal),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+    // A page taller than the window scrolls at its full size. It used to be
+    // scaled down to fit and centred, which shrank Today and Settings and
+    // pulled their left edge in, off the title's and away from Tools.
     return LayoutBuilder(
       builder: (context, c) => SingleChildScrollView(
         padding: centred,
@@ -172,7 +228,7 @@ class PageScroll extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
+            children: _kids,
           ),
         ),
       ),
@@ -180,7 +236,8 @@ class PageScroll extends StatelessWidget {
   }
 }
 
-/// A pushed tool screen: glass bar with a back button, gradient behind.
+/// A pushed tool screen: a One UI app bar with a back button, opening
+/// collapsed as a second-depth screen does.
 class ToolScreen extends StatelessWidget {
   const ToolScreen({super.key, required this.title, required this.children});
   final String title;
@@ -194,25 +251,6 @@ class ToolScreen extends StatelessWidget {
       statusBarStyle: p.dark
           ? GlassStatusBarStyle.light
           : GlassStatusBarStyle.dark,
-      appBar: GlassAppBar(
-        title: Text(
-          title,
-          style: TextStyle(
-            color: p.ink,
-            fontSize: isWideLayout(context) ? 20.sp : 17.sp,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        // Lined up with the cards' left edge (the bar adds its own 8).
-        leading: Padding(
-          padding: EdgeInsets.only(left: 8.dp),
-          child: RoundGlassButton(
-            icon: CupertinoIcons.chevron_back,
-            semanticLabel: 'Back',
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-        ),
-      ),
       bottomBarHeight: _actions == null ? 0 : 58.dp,
       bottomBar: _actions == null
           ? null
@@ -244,6 +282,14 @@ class ToolScreen extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: contentMaxWidth(context)),
             child: PageScroll(
+              title: title,
+              startCollapsed: true,
+              leading: OneIconButton(
+                icon: PhosphorIconsBold.caretLeft,
+                size: 20,
+                tooltip: 'Back',
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
               padding: pagePadding(context, tabBar: _actions != null),
               children: _layout(context),
             ),
@@ -516,9 +562,10 @@ class Pane extends StatelessWidget {
     // A card stretched to level two columns keeps its content in its
     // middle; cards inside it are not stretched.
     final fill = _PaneFill.of(context);
+    // A One UI focus block: 26dp corners, content on the 20dp inner keyline.
     return GlassSurface(
-      radius: 18.dp,
-      padding: padding ?? EdgeInsets.fromLTRB(18.dp, 16.dp, 18.dp, 16.dp),
+      radius: OneUi.radiusBlock,
+      padding: padding ?? EdgeInsets.fromLTRB(20.dp, 18.dp, 20.dp, 18.dp),
       tint: tint,
       child: !fill
           ? child
@@ -559,14 +606,14 @@ class Caption extends StatelessWidget {
   final Color? color;
   final TextAlign? align;
   @override
+  // Sentence case: One UI capitalises the first letter only (guide p.64).
   Widget build(BuildContext context) => Text(
-    text.toUpperCase(),
+    text,
     textAlign: align,
     style: TextStyle(
       color: color ?? Pal.of(context).sub,
-      fontSize: 11.5.sp,
+      fontSize: 13.5.sp,
       fontWeight: FontWeight.w600,
-      letterSpacing: 0.8,
     ),
   );
 }
@@ -575,9 +622,10 @@ class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {super.key});
   final String text;
   @override
+  // On the 24dp keyline: the page's 12 plus 12 here.
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(6.dp, 18.dp, 6.dp, 8.dp),
-    child: Caption(text),
+    padding: EdgeInsets.fromLTRB(12.dp, 22.dp, 12.dp, 8.dp),
+    child: Semantics(header: true, child: Caption(text)),
   );
 }
 
@@ -633,8 +681,10 @@ class DateTimeField extends StatelessWidget {
       children: [
         Row(
           children: [
-            Caption(label),
-            const Spacer(),
+            // The label gives way (wraps) at a large font size; the
+            // weekday beside it never does.
+            Expanded(child: Caption(label)),
+            SizedBox(width: 8.dp),
             Caption(DateFormat('EEEE').format(value), color: p.accent),
           ],
         ),
@@ -659,7 +709,7 @@ class DateTimeField extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: 6.dp),
-                    Icon(CupertinoIcons.calendar, size: 18.dp, color: p.accent),
+                    Icon(PhosphorIconsFill.calendarBlank, size: 18.dp, color: p.accent),
                   ],
                 ),
               ),
@@ -729,9 +779,11 @@ class _Tap extends StatelessWidget {
 class Hairline extends StatelessWidget {
   const Hairline({super.key});
   @override
+  // One UI's list divider: 1px in the divider colour, inside the block's
+  // padding, so it is inset from both edges rather than full width.
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.symmetric(vertical: 12.dp),
-    child: Container(height: 0.6.dp, color: Pal.of(context).faint),
+    child: Container(height: 1, color: Pal.of(context).faint),
   );
 }
 
@@ -761,36 +813,27 @@ class SwitchRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  color: p.ink,
-                  fontSize: 15.5.sp,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(color: p.ink, fontSize: 17.sp),
               ),
               if (hint != null)
                 Padding(
                   padding: EdgeInsets.only(top: 2.dp),
                   child: Text(
                     hint!,
-                    style: TextStyle(color: p.sub, fontSize: 12.5.sp),
+                    style: TextStyle(color: p.sub, fontSize: 14.sp),
                   ),
                 ),
             ],
           ),
         ),
-        // The plain iOS switch: it slides, with none of the glass switch's
-        // jelly stretch. Drawn at 0.8: full size was heavy beside the text.
+        SizedBox(width: 12.dp),
+        // The Android switch in One UI's colours (oneSwitchTheme): a
+        // control of its own beside the text, never a coupled block.
+        // Drawn at 80% (owner's call: the full Material size read too big);
+        // the scale is paint-only, so the 48dp touch target is unchanged.
         Transform.scale(
           scale: 0.8,
-          alignment: Alignment.centerRight,
-          child: CupertinoSwitch(
-            value: value,
-            onChanged: onChanged,
-            activeTrackColor: p.accent,
-            inactiveTrackColor: p.dark
-                ? Colors.white.withValues(alpha: 0.16)
-                : Colors.black.withValues(alpha: 0.12),
-          ),
+          child: Switch(value: value, onChanged: onChanged),
         ),
       ],
     );
@@ -810,7 +853,8 @@ class BigFigure extends StatelessWidget {
       children: [
         FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(
+          // Counts to a new answer as the inputs change.
+          child: CountText(
             value,
             style: TextStyle(
               color: p.ink,
@@ -860,7 +904,7 @@ class StatGrid extends StatelessWidget {
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text(
+                child: CountText(
                   it.$1,
                   style: TextStyle(
                     color: p.ink,
@@ -932,7 +976,7 @@ class ResultLine extends StatelessWidget {
           // the value sat mid-card and the right half of the card was empty.
           Expanded(
             flex: 2,
-            child: Text(
+            child: CountText(
               value,
               textAlign: TextAlign.right,
               style: TextStyle(
@@ -1014,20 +1058,20 @@ class ResultActions extends StatelessWidget {
       child: Row(
         children: [
           if (onReset != null) ...[
-            pill(CupertinoIcons.arrow_counterclockwise, 'Reset', onReset!),
+            pill(PhosphorIconsBold.arrowCounterClockwise, 'Reset', onReset!),
             SizedBox(width: 10.dp),
           ],
-          pill(CupertinoIcons.doc_on_doc, 'Copy', () {
+          pill(PhosphorIconsBold.copy, 'Copy', () {
             Clipboard.setData(ClipboardData(text: shareText()));
             showToast(
               context,
               message: 'Copied',
-              icon: CupertinoIcons.checkmark_alt,
+              icon: PhosphorIconsBold.check,
             );
           }),
           if (s.showShare) ...[
             SizedBox(width: 10.dp),
-            pill(CupertinoIcons.share, 'Share', () {
+            pill(PhosphorIconsBold.shareNetwork, 'Share', () {
               SharePlus.instance.share(ShareParams(text: shareText()));
             }),
           ],
@@ -1038,7 +1082,7 @@ class ResultActions extends StatelessWidget {
 
   void _copy(BuildContext context) {
     Clipboard.setData(ClipboardData(text: shareText()));
-    showToast(context, message: 'Copied', icon: CupertinoIcons.checkmark_alt);
+    showToast(context, message: 'Copied', icon: PhosphorIconsBold.check);
   }
 
   /// One glass capsule holding the three actions, split by hairlines, as an
@@ -1082,13 +1126,13 @@ class ResultActions extends StatelessWidget {
       child: Row(
         children: [
           if (onReset != null) ...[
-            item(CupertinoIcons.arrow_counterclockwise, 'Reset', onReset!),
+            item(PhosphorIconsBold.arrowCounterClockwise, 'Reset', onReset!),
             divider(),
           ],
-          item(CupertinoIcons.doc_on_doc, 'Copy', () => _copy(context)),
+          item(PhosphorIconsBold.copy, 'Copy', () => _copy(context)),
           if (s.showShare) ...[
             divider(),
-            item(CupertinoIcons.share, 'Share', () {
+            item(PhosphorIconsBold.shareNetwork, 'Share', () {
               SharePlus.instance.share(ShareParams(text: shareText()));
             }),
           ],
@@ -1116,82 +1160,95 @@ class Segments<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Pal.of(context);
-    final height = 46.dp;
+    final height = 48.dp;
     final index = values.indexOf(selected).clamp(0, values.length - 1);
-    return GlassSurface(
-      radius: height / 2,
-      thick: true,
-      padding: EdgeInsets.all(4.dp),
-      child: SizedBox(
-        height: height - 8.dp,
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final w = c.maxWidth / values.length;
-            return Stack(
-              children: [
-                SpringValue(
-                  value: index.toDouble(),
-                  // Firm enough to settle without a wobble; kept inside the
-                  // bar so the pill never slides past the end tab and clips.
-                  dampingRatio: 0.8,
-                  builder: (context, at, child) => Positioned(
-                    left: w * at.clamp(0.0, (values.length - 1).toDouble()),
+    // One UI's segmented subtabs: a grey track with the choice on a raised
+    // pill that springs across (none with reduced motion).
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.dark ? const Color(0xFF252528) : const Color(0xFFE4E4E7),
+        borderRadius: BorderRadius.circular(height / 2),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(4.dp),
+        child: SizedBox(
+          height: height - 8.dp,
+          child: LayoutBuilder(
+            builder: (context, c) {
+              final w = c.maxWidth / values.length;
+              return Stack(
+                children: [
+                  // The pill on the snap spring, which keeps its speed if
+                  // another segment is chosen mid-flight and lands without
+                  // a wobble; kept inside the track so it never slides past
+                  // the end segment. Moved by a transform.
+                  Positioned(
+                    left: 0,
                     top: 0,
                     bottom: 0,
                     width: w,
-                    child: child!,
+                    child: SpringValue(
+                      value: index.toDouble(),
+                      child: SelectionPill(dark: p.dark),
+                      builder: (context, at, child) => Transform.translate(
+                        offset: Offset(
+                          w * at.clamp(0.0, (values.length - 1).toDouble()),
+                          0,
+                        ),
+                        child: child,
+                      ),
+                    ),
                   ),
-                  child: SelectionPill(dark: p.dark),
-                ),
-                Row(
-                  children: [
-                    for (var i = 0; i < values.length; i++)
-                      Expanded(
-                        child: Semantics(
-                          button: true,
-                          selected: i == index,
-                          label: labels[i],
-                          excludeSemantics: true,
-                          onTap: () => onChanged(values[i]),
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () {
-                                if (i == index) return;
-                                HapticFeedback.selectionClick();
-                                onChanged(values[i]);
-                              },
-                              child: Center(
-                                child: Text(
-                                  labels[i],
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  style: TextStyle(
-                                    color: i == index ? p.ink : p.sub,
-                                    fontSize: 14.sp,
-                                    fontWeight: i == index
-                                        ? FontWeight.w600
-                                        : FontWeight.w500,
+                  Row(
+                    children: [
+                      for (var i = 0; i < values.length; i++)
+                        Expanded(
+                          child: Semantics(
+                            button: true,
+                            selected: i == index,
+                            label: labels[i],
+                            excludeSemantics: true,
+                            onTap: () => onChanged(values[i]),
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  if (i == index) return;
+                                  HapticFeedback.selectionClick();
+                                  onChanged(values[i]);
+                                },
+                                child: Center(
+                                  child: Text(
+                                    labels[i],
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: TextStyle(
+                                      color: i == index ? p.ink : p.sub,
+                                      fontSize: 14.sp,
+                                      fontWeight: i == index
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              ],
-            );
-          },
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-/// The lighter pill under a chosen segment or tab.
+/// The raised pill under a chosen segment.
 class SelectionPill extends StatelessWidget {
   const SelectionPill({super.key, required this.dark});
   final bool dark;
@@ -1200,30 +1257,25 @@ class SelectionPill extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(999),
-      color: dark
-          ? Colors.white.withValues(alpha: 0.14)
-          : Colors.white.withValues(alpha: 0.8),
-      border: Border.all(
-        color: Colors.white.withValues(alpha: dark ? 0.18 : 0.9),
-        width: 0.8,
-      ),
+      color: dark ? const Color(0xFF4A4A4F) : const Color(0xFFFCFCFF),
       boxShadow: dark
           ? null
-          : [
+          : const [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 8,
+                color: Color(0x14000000),
+                blurRadius: 3,
+                offset: Offset(0, 1),
               ),
             ],
     ),
   );
 }
 
-/// `.interactive()` glass, as iOS does it: swells under the finger, and
-/// settles back with a small bounce on release, keeping its speed if pressed
-/// again mid-bounce. A soft light follows the finger in the glass. Pass
-/// [builder] instead of [child] to also brighten the glass while it is held
-/// (`GlassSurface(lit: down)`).
+/// A pressable surface: a grey veil while it is held (pass [builder] and
+/// draw `GlassSurface(lit: down)`), a light haptic on the tap, and the
+/// app's press ([PressScale]): it sinks to 0.97 in 90ms the moment the
+/// finger lands and comes back on the snap spring, never past full size.
+/// Still with reduced motion.
 class GlassPress extends StatefulWidget {
   const GlassPress({
     super.key,
@@ -1244,7 +1296,6 @@ class GlassPress extends StatefulWidget {
 class _GlassPressState extends State<GlassPress> {
   bool _down = false;
   bool _hover = false;
-  Offset? _at; // the finger, in this button's own coordinates
 
   void _set(bool v) {
     if (_down != v) setState(() => _down = v);
@@ -1265,34 +1316,24 @@ class _GlassPressState extends State<GlassPress> {
         onExit: (_) {
           if (_hover) setState(() => _hover = false);
         },
-        child: Listener(
-          onPointerDown: (e) => setState(() => _at = e.localPosition),
-          onPointerMove: (e) {
-            if (_down) setState(() => _at = e.localPosition);
+        // No pointer tracking here: the veil is one state change down and
+        // one up, never a rebuild per finger move; PressScale moves a
+        // transform only.
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => _set(true),
+          onTapCancel: () => _set(false),
+          onTapUp: (_) => _set(false),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            widget.onTap();
           },
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (_) => _set(true),
-            onTapCancel: () => _set(false),
-            onTapUp: (_) => _set(false),
-            onTap: () {
-              HapticFeedback.lightImpact();
-              widget.onTap();
-            },
-            child: SpringValue(
-              value: _down && !still ? 1 : (_hover && !still ? 0.33 : 0),
-              stiffness: _down ? 420 : 180,
-              dampingRatio: _down ? 0.8 : 0.5,
-              child: widget.builder?.call(_down) ?? widget.child,
-              builder: (context, v, child) => Transform.scale(
-                scale: 1 + 0.06 * v,
-                child: PressGlow(
-                  point: _at,
-                  strength: v.clamp(0.0, 1.0),
-                  child: child!,
-                ),
-              ),
-            ),
+          // The app's one press (PressScale): down in 90ms, back on the
+          // snap spring without a rebound.
+          child: PressScale(
+            child:
+                widget.builder?.call(_down || (_hover && !still)) ??
+                widget.child!,
           ),
         ),
       ),
@@ -1300,7 +1341,8 @@ class _GlassPressState extends State<GlassPress> {
   }
 }
 
-/// A round glass button (back, previous, next).
+/// A round icon button (back, previous, next): One UI's plain icon with a
+/// round ripple and a 48dp target, no plate behind it.
 class RoundGlassButton extends StatelessWidget {
   const RoundGlassButton({
     super.key,
@@ -1316,41 +1358,16 @@ class RoundGlassButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = Pal.of(context);
-    final size = this.size ?? 44.dp;
-    return GlassPress(
-      onTap: onPressed,
-      label: semanticLabel,
-      builder: (down) => SizedBox.square(
-        dimension: size,
-        child: GlassSurface(
-          radius: size / 2,
-          thick: true,
-          lit: down,
-          // Centred by eye, not by box: a box-centred chevron reads as
-          // pushed toward its open side, so it moves slightly the way it
-          // points.
-          child: Center(
-            child: Transform.translate(
-              offset: Offset(_lean(icon) * size * 0.035, 0),
-              child: Icon(icon, color: p.ink, size: size * 0.42),
-            ),
-          ),
-        ),
+    final size = math.max(this.size ?? 48.dp, OneUi.minTouch);
+    return SizedBox.square(
+      dimension: size,
+      child: OneIconButton(
+        icon: icon,
+        tooltip: semanticLabel,
+        size: 22.dp,
+        onPressed: onPressed,
       ),
     );
-  }
-
-  /// -1 for a chevron pointing left, +1 pointing right.
-  static double _lean(IconData i) {
-    if (i == CupertinoIcons.chevron_left || i == CupertinoIcons.chevron_back) {
-      return -1;
-    }
-    if (i == CupertinoIcons.chevron_right ||
-        i == CupertinoIcons.chevron_forward) {
-      return 1;
-    }
-    return 0;
   }
 }
 
@@ -1366,7 +1383,7 @@ Future<DateTime?> showGlassDatePicker({
   String? title,
 }) {
   var picked = initialDateTime;
-  return showGlassSheet<DateTime>(
+  return showAppSheet<DateTime>(
     context,
     builder: (ctx) {
       final p = Pal.of(ctx);
@@ -1467,8 +1484,8 @@ Future<DateTime?> showGlassDatePicker({
 // The toast on screen now: a new one replaces it rather than stacking.
 void Function()? _closeToast;
 
-/// A small glass toast near the bottom of the screen. It springs up from
-/// below and drops back out; moved by position, never faded, so its glass is
+/// A small toast at the top of the screen. It slides down on [kSettle] and
+/// back up on [kExit]; moved by position, never faded, so its glass is
 /// never drawn over an empty layer (a white flash).
 void showToast(
   BuildContext context, {
@@ -1496,7 +1513,7 @@ void showToast(
       return;
     }
     shown.value = false;
-    Future.delayed(const Duration(milliseconds: 260), () {
+    Future.delayed(const Duration(milliseconds: kExitMs + 20), () {
       entry.remove();
       shown.dispose();
     });
@@ -1548,15 +1565,20 @@ void showToast(
         builder: (ctx, on, child) => TweenAnimationBuilder<double>(
           tween: Tween(end: on ? 1 : 0),
           duration: Duration(
-            milliseconds: reduce ? 0 : (on ? kSpringSoftMs : 240),
+            milliseconds: reduce ? 0 : (on ? kSettleMs : kExitMs),
           ),
-          curve: on ? kSpringSoft : Curves.easeInCubic,
+          curve: on ? kSettle : kExit,
           child: child,
+          // Down from above the screen on the settle spring, back up on an
+          // accelerating ease: moved by a transform, never re-laid out.
           builder: (ctx, v, child) => Positioned(
             left: 16.dp,
             right: 16.dp,
-            top: top - (top + 140.dp) * (1 - v),
-            child: child!,
+            top: top,
+            child: Transform.translate(
+              offset: Offset(0, -(top + 140.dp) * (1 - v)),
+              child: child!,
+            ),
           ),
         ),
       );

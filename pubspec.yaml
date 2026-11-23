@@ -1,7 +1,7 @@
 name: dates
 description: "A new Flutter project."
 publish_to: 'none'
-version: 0.1.4+5
+version: 0.1.5+6
 
 environment:
   sdk: ^3.11.5
@@ -13,6 +13,7 @@ dependencies:
   flutter_screenutil: ^5.9.3
   in_app_update: ^4.2.5
   intl: ^0.20.3
+  phosphor_flutter: 2.1.0
   share_plus: ^13.3.1
   shared_preferences: ^2.5.6
 
@@ -22,11 +23,13 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.4.7
+  material_symbols_icons: 4.2960.0
+  hugeicons: 4.4.0
+  iconsax_plus: 1.0.0
+  fluentui_system_icons: 1.1.273
 
 flutter:
   uses-material-design: true
-  shaders:
-    - shaders/lens.frag
   fonts:
     - family: Inter
       fonts:
@@ -53,6 +56,9 @@ flutter_launcher_icons:
   adaptive_icon_background: "assets/icon/bg.png"
   adaptive_icon_foreground: "assets/icon/fg.png"
   adaptive_icon_monochrome: "assets/icon/mono.png"
+  # The real margin is uneven (it centres the words in the circle) and is
+  # written by tool/date_icons.py into ic_launcher.xml: rerun that script
+  # after this tool, which can only write one even inset.
   adaptive_icon_foreground_inset: 0
 
 flutter_native_splash:

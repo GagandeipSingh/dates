@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -291,6 +291,16 @@ class _AddScreenState extends State<AddScreen> {
                                 borderRadius: BorderRadius.circular(14.dp),
                                 borderSide: BorderSide.none,
                               ),
+                              // Focus draws an accent outline (the field's
+                              // own 200ms ease), so the box being typed
+                              // into is plain at a glance.
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14.dp),
+                                borderSide: BorderSide(
+                                  color: p.accent,
+                                  width: 1.5,
+                                ),
+                              ),
                             ),
                           ),
                           SizedBox(height: 6.dp),
@@ -310,7 +320,8 @@ class _AddScreenState extends State<AddScreen> {
                   for (final q in _quick)
                     _QuickAmount(
                       label: '${subtract ? '−' : '+'}${q.$1}',
-                      on: _v('Years') == q.$2 &&
+                      on:
+                          _v('Years') == q.$2 &&
                           _v('Months') == 0 &&
                           _v('Weeks') == q.$3 &&
                           _v('Days') == q.$4,
@@ -337,40 +348,40 @@ class _AddScreenState extends State<AddScreen> {
                     ),
                   ]
                 : [
-              Caption(DateFormat('EEEE').format(r), color: p.accent),
-              SizedBox(height: 6.dp),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  s.date(r),
-                  style: TextStyle(
-                    color: p.ink,
-                    fontSize: 32.sp,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.6,
-                  ),
-                ),
-              ),
-              SizedBox(height: 4.dp),
-              Text(
-                '$amount ${subtract ? 'before' : 'after'} ${s.date(start)}',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: p.sub, fontSize: 13.5.sp),
-              ),
-              const Hairline(),
-              ResultLine(
-                'Days ${subtract ? 'back' : 'ahead'}',
-                plural(gap, 'day'),
-              ),
-              ResultLine(
-                'Day of year',
-                '${dayOfYear(r)} of ${daysInYear(r.year)}',
-              ),
-              ResultLine(
-                'Week',
-                '${weekOfYear(r, mondayFirst: s.mondayFirst)}',
-              ),
-            ],
+                    Caption(DateFormat('EEEE').format(r), color: p.accent),
+                    SizedBox(height: 6.dp),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        s.date(r),
+                        style: TextStyle(
+                          color: p.ink,
+                          fontSize: 32.sp,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.6,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 4.dp),
+                    Text(
+                      '$amount ${subtract ? 'before' : 'after'} ${s.date(start)}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: p.sub, fontSize: 13.5.sp),
+                    ),
+                    const Hairline(),
+                    ResultLine(
+                      'Days ${subtract ? 'back' : 'ahead'}',
+                      plural(gap, 'day'),
+                    ),
+                    ResultLine(
+                      'Day of year',
+                      '${dayOfYear(r)} of ${daysInYear(r.year)}',
+                    ),
+                    ResultLine(
+                      'Week',
+                      '${weekOfYear(r, mondayFirst: s.mondayFirst)}',
+                    ),
+                  ],
           ),
         ),
         ResultActions(
@@ -408,19 +419,24 @@ class _QuickAmount extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.symmetric(horizontal: 12.dp, vertical: 7.dp),
-          decoration: BoxDecoration(
-            color: on ? p.accent.withValues(alpha: 0.16) : p.faint,
-            borderRadius: BorderRadius.circular(10.dp),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: on ? p.accent : p.sub,
-              fontSize: 13.sp,
-              fontWeight: FontWeight.w600,
+        // Sinks under the finger and comes back; the fill is a plain
+        // colour ease.
+        child: PressScale(
+          child: AnimatedContainer(
+            duration: motion(context, kFadeMs),
+            curve: kFade,
+            padding: EdgeInsets.symmetric(horizontal: 12.dp, vertical: 7.dp),
+            decoration: BoxDecoration(
+              color: on ? p.accent.withValues(alpha: 0.16) : p.faint,
+              borderRadius: BorderRadius.circular(10.dp),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: on ? p.accent : p.sub,
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ),
@@ -528,7 +544,7 @@ class _AgeScreenState extends State<AgeScreen> {
                     color: p.accent.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(13.dp),
                   ),
-                  child: Icon(CupertinoIcons.gift_fill, color: p.accent),
+                  child: Icon(PhosphorIconsFill.gift, color: p.accent),
                 ),
                 SizedBox(height: 10.dp),
                 Text(
@@ -556,44 +572,44 @@ class _AgeScreenState extends State<AgeScreen> {
             ),
           )
         else
-        Pane(
-          child: Row(
-            children: [
-              Container(
-                width: 46.dp,
-                height: 46.dp,
-                decoration: BoxDecoration(
-                  color: p.accent.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(14.dp),
+          Pane(
+            child: Row(
+              children: [
+                Container(
+                  width: 46.dp,
+                  height: 46.dp,
+                  decoration: BoxDecoration(
+                    color: p.accent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(14.dp),
+                  ),
+                  child: Icon(PhosphorIconsFill.gift, color: p.accent),
                 ),
-                child: Icon(CupertinoIcons.gift_fill, color: p.accent),
-              ),
-              SizedBox(width: 14.dp),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      nb.daysAway == 0
-                          ? 'Happy birthday!'
-                          : 'Next birthday in ${plural(nb.daysAway, 'day')}',
-                      style: TextStyle(
-                        color: p.ink,
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w600,
+                SizedBox(width: 14.dp),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nb.daysAway == 0
+                            ? 'Happy birthday!'
+                            : 'Next birthday in ${plural(nb.daysAway, 'day')}',
+                        style: TextStyle(
+                          color: p.ink,
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 2.dp),
-                    Text(
-                      '${DateFormat('EEEE').format(nb.date)}, ${s.date(nb.date)} · turning ${nb.turning}',
-                      style: TextStyle(color: p.sub, fontSize: 13.sp),
-                    ),
-                  ],
+                      SizedBox(height: 2.dp),
+                      Text(
+                        '${DateFormat('EEEE').format(nb.date)}, ${s.date(nb.date)} · turning ${nb.turning}',
+                        style: TextStyle(color: p.sub, fontSize: 13.sp),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         const SectionTitle('Totals'),
         StatGrid([
           (n(r.totalMonths), 'Months'),
@@ -719,8 +735,8 @@ class YearGlance extends StatelessWidget {
     children: [
       Row(
         children: [
-          Caption(title),
-          const Spacer(),
+          Expanded(child: Caption(title)),
+          SizedBox(width: 8.dp),
           Text(
             '${(value * 100).toStringAsFixed(1)}%',
             style: TextStyle(
@@ -838,32 +854,66 @@ class ProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Pal.of(context);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6.dp),
-      child: SizedBox(
-        height: 10.dp,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: p.faint),
-            FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: value.clamp(0.0, 1.0),
-              heightFactor: 1,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6.dp),
-                  gradient: LinearGradient(
-                    colors: [p.accent.withValues(alpha: 0.75), p.accent],
-                  ),
-                ),
-              ),
+    // Fills from empty when its screen opens and eases to a new date's
+    // value; painted, so a frame of it repaints one bar and lays out
+    // nothing.
+    return SizedBox(
+      height: 10.dp,
+      width: double.infinity,
+      child: RepaintBoundary(
+        child: FillOnce(
+          value: value.clamp(0.0, 1.0),
+          builder: (context, v) => CustomPaint(
+            painter: _BarPainter(
+              value: v,
+              track: p.faint,
+              from: p.accent.withValues(alpha: 0.75),
+              to: p.accent,
+              radius: 6.dp,
             ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _BarPainter extends CustomPainter {
+  _BarPainter({
+    required this.value,
+    required this.track,
+    required this.from,
+    required this.to,
+    required this.radius,
+  });
+  final double value, radius;
+  final Color track, from, to;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = Radius.circular(radius);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, r),
+      Paint()..color = track,
+    );
+    final w = size.width * value.clamp(0.0, 1.0);
+    if (w <= 0) return;
+    final rect = Rect.fromLTWH(0, 0, w, size.height);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, r),
+      Paint()
+        ..shader = LinearGradient(
+          colors: [from, to],
+        ).createShader(Offset.zero & size),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BarPainter old) =>
+      old.value != value ||
+      old.track != track ||
+      old.to != to ||
+      old.radius != radius;
 }
 
 /// A tiny calendar leaf: month band over the day number.
@@ -1005,22 +1055,26 @@ class _WorkingDaysScreenState extends State<WorkingDaysScreen> {
                       },
                       child: Column(
                         children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOutCubic,
-                            width: 38.dp,
-                            height: 38.dp,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: work.contains(d) ? p.accent : p.faint,
-                            ),
-                            child: Text(
-                              name(d, 'EEEEE'),
-                              style: TextStyle(
-                                color: work.contains(d) ? Colors.white : p.sub,
-                                fontSize: 15.sp,
-                                fontWeight: FontWeight.w700,
+                          PressScale(
+                            child: AnimatedContainer(
+                              duration: motion(context, kFadeMs),
+                              curve: kFade,
+                              width: 38.dp,
+                              height: 38.dp,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: work.contains(d) ? p.accent : p.faint,
+                              ),
+                              child: Text(
+                                name(d, 'EEEEE'),
+                                style: TextStyle(
+                                  color: work.contains(d)
+                                      ? Colors.white
+                                      : p.sub,
+                                  fontSize: 15.sp,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
@@ -1120,7 +1174,7 @@ class _LeapYearScreenState extends State<LeapYearScreen> {
       children: [
         Row(
           children: [
-            arrow(CupertinoIcons.chevron_left, 'Previous year', -1),
+            arrow(PhosphorIconsBold.caretLeft, 'Previous year', -1),
             SizedBox(width: 12.dp),
             Expanded(
               child: GestureDetector(
@@ -1147,7 +1201,7 @@ class _LeapYearScreenState extends State<LeapYearScreen> {
               ),
             ),
             SizedBox(width: 12.dp),
-            arrow(CupertinoIcons.chevron_right, 'Next year', 1),
+            arrow(PhosphorIconsBold.caretRight, 'Next year', 1),
           ],
         ),
         Gap(14.dp),

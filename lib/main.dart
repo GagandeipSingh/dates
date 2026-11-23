@@ -4,8 +4,9 @@ import 'package:flutter/services.dart';
 
 import 'state/app_update.dart';
 import 'state/settings.dart';
-import 'ui/glass_surface.dart' show GlassLens;
+import 'state/today.dart';
 import 'ui/home.dart';
+import 'ui/one_ui.dart';
 import 'ui/page_motion.dart';
 import 'ui/scale.dart';
 import 'ui/update_prompt.dart';
@@ -34,10 +35,14 @@ Future<void> main() async {
       DeviceOrientation.portraitDown,
     ]);
   }
-  // The liquid glass lens; without it (no Impeller) glass is frost only.
-  await GlassLens.load();
   final settings = await Settings.load();
-  runApp(SettingsScope(settings: settings, child: const DatesApp()));
+  runApp(
+    SettingsScope(
+      settings: settings,
+      // Today's date, kept current while the app is open.
+      child: const TodayScope(child: DatesApp()),
+    ),
+  );
   // Play's own "Update available" sheet, when Play has a newer version.
   AppUpdater.instance
     ..onReady = () async {
@@ -57,29 +62,30 @@ class DatesApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = SettingsScope.of(context);
-    ThemeData theme(Brightness b) => ThemeData(
-      brightness: b,
-      fontFamily: 'Inter',
-      colorSchemeSeed: s.accent.color,
-      useMaterial3: true,
-      splashFactory: NoSplash.splashFactory,
-      // Screens slide in from the right and can be swiped back, as on
-      // iOS, on every platform.
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
-        },
-      ),
-      cupertinoOverrideTheme: const CupertinoThemeData(
-        textTheme: CupertinoTextThemeData(
-          textStyle: TextStyle(fontFamily: 'Inter'),
-        ),
-      ),
-    );
+    // One UI's colours in a Material 3 theme (ui/one_ui.dart), with the
+    // user's accent as the primary. Inter, not Samsung's own face: One UI
+    // Sans has no licence to ship, and Inter is the closest open face.
+    ThemeData theme(Brightness b) =>
+        oneUiTheme(b, accent: s.accent.color).copyWith(
+          // Any route the theme builds moves like the app's own (shared
+          // axis X, ui/page_motion.dart): no Material zoom or Cupertino
+          // slide anywhere.
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: AppPageTransitionsBuilder(),
+              TargetPlatform.iOS: AppPageTransitionsBuilder(),
+              TargetPlatform.windows: AppPageTransitionsBuilder(),
+              TargetPlatform.macOS: AppPageTransitionsBuilder(),
+              TargetPlatform.linux: AppPageTransitionsBuilder(),
+              TargetPlatform.fuchsia: AppPageTransitionsBuilder(),
+            },
+          ),
+          cupertinoOverrideTheme: const CupertinoThemeData(
+            textTheme: CupertinoTextThemeData(
+              textStyle: TextStyle(fontFamily: 'Inter'),
+            ),
+          ),
+        );
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Dates',
@@ -118,7 +124,7 @@ class DatesApp extends StatelessWidget {
       // it slides aside under a push as one still picture too. (As a
       // MaterialPageRoute it was moved by Flutter's delegated transition,
       // which hides the slide from the screen's own transition.)
-      onGenerateRoute: (_) => GlassPageRoute(builder: (_) => const HomeShell()),
+      onGenerateRoute: (_) => AppPageRoute(builder: (_) => const HomeShell()),
     );
   }
 }

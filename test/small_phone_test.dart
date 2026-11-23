@@ -4,12 +4,17 @@
 // * the top bar sits BELOW the status bar, never pressed up under it;
 // * the "Copied" toast appears at the top, clear of Android's own clipboard
 //   pill at the bottom of the screen;
-// * a segment highlight never leaves its track, even mid-spring.
+// * a segment highlight never leaves its track, even mid-glide;
+// * the date dock's split pills float above the system navigation, each a
+//   48dp named target, the open one a wide pill showing its whole label,
+//   following the selection on a spring (at once with reduced motion).
 import 'package:dates/main.dart';
 import 'package:dates/state/settings.dart';
+import 'package:dates/ui/date_dock.dart';
 import 'package:dates/ui/glass_surface.dart';
 import 'package:dates/ui/kit.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +52,10 @@ Future<void> _start(WidgetTester t, Size size, double ratio, double statusDp, do
 double _statusBottom(WidgetTester t, double statusDp, double ratio) =>
     statusDp * ratio / t.view.devicePixelRatio;
 
+/// A dock item by its label (Today announces the full date after it).
+Finder _dock(String label) =>
+    find.bySemanticsLabel(RegExp('^${RegExp.escape(label)}(,|\$)')).last;
+
 void main() {
   for (final (where, size, ratio, statusDp, navDp) in _phones) {
     for (final dark in [false, true]) {
@@ -55,7 +64,7 @@ void main() {
       testWidgets('$mode: every screen fits on $where at large text', (t) async {
         await _start(t, size, ratio, statusDp, navDp, dark: dark, text: 1.25);
         for (final tab in ['Settings', 'Tools']) {
-          await t.tap(find.bySemanticsLabel(tab).last);
+          await t.tap(_dock(tab));
           await t.pumpAndSettle();
         }
         for (final tool in _tools) {
@@ -73,46 +82,62 @@ void main() {
         await _start(t, size, ratio, statusDp, navDp, dark: dark);
         final statusBottom = _statusBottom(t, statusDp, ratio);
         for (final tab in ['Today', 'Tools', 'Settings']) {
-          await t.tap(find.bySemanticsLabel(tab).last);
+          await t.tap(_dock(tab));
           await t.pumpAndSettle();
-          // The bar's glass runs up under the status bar on purpose; its
-          // TITLE must sit clear of it, with room to breathe.
-          final title = t.getRect(find.descendant(
-              of: find.byType(GlassAppBar).first, matching: find.text(tab)).first);
-          expect(title.top - statusBottom, greaterThanOrEqualTo(6),
-              reason: '$tab title has breathing room under the status bar');
+          // The app bar runs up under the status bar on purpose; its
+          // TITLE (expanded or collapsed) must sit clear of it.
+          final titles = find.descendant(
+              of: find.byType(OneScrollPage), matching: find.text(tab));
+          expect(titles, findsWidgets);
+          for (final e in titles.evaluate()) {
+            final title = t.getRect(find.byWidget(e.widget));
+            expect(title.top - statusBottom, greaterThanOrEqualTo(6),
+                reason: '$tab title has breathing room under the status bar');
+          }
         }
         // A pushed tool screen has the same header spacing.
-        await t.tap(find.bySemanticsLabel('Tools').last);
+        await t.tap(_dock('Tools'));
         await t.pumpAndSettle();
         await t.tap(find.text('Add or Subtract').first);
         await t.pumpAndSettle();
         final back = t.getRect(find.bySemanticsLabel('Back').first);
-        expect(back.top - statusBottom, greaterThanOrEqualTo(4),
+        // Its 48dp target sits centred in One UI's 56dp bar, so a few dp of
+        // the target's own padding is the gap (before the app's scaling).
+        expect(back.top - statusBottom, greaterThanOrEqualTo(3),
             reason: 'back button is clear of the status bar');
       });
 
-      testWidgets('$mode: the nav buttons get their own strip on $where', (t) async {
+      testWidgets('$mode: the dock pills float above the nav buttons on $where', (t) async {
         await _start(t, size, ratio, statusDp, navDp, dark: dark);
-        for (final tab in ['Today', 'Tools', 'Settings']) {
-          await t.tap(find.bySemanticsLabel(tab).last);
+        final handle = t.ensureSemantics();
+        final screen = t.view.physicalSize / t.view.devicePixelRatio;
+        for (final (tab, label) in _dockTabs) {
+          await t.tap(_dock(label));
           await t.pumpAndSettle();
-          final strip = find.descendant(
-              of: find.byType(NavButtonBacking), matching: find.byType(GlassSurface));
-          if (navDp >= NavButtonBacking.threeButtonMinDp) {
-            // 3-button: the buttons sit on the app's liquid glass, never on
-            // raw content.
-            expect(strip, findsOneWidget, reason: '$tab has a glass strip');
-            final screen = t.view.physicalSize / t.view.devicePixelRatio;
-            final r = t.getRect(strip);
-            expect(r.bottom, closeTo(screen.height, 0.5), reason: '$tab strip at the bottom');
-            expect(r.height, closeTo(navDp, 0.5), reason: '$tab strip covers the buttons');
-            expect(r.width, closeTo(screen.width, 0.5));
-          } else {
-            // Gesture nav: content runs to the edge under the handle.
-            expect(strip, findsNothing, reason: '$tab has no glass under a gesture bar');
+          expect(t.takeException(), isNull, reason: 'nothing overflows on $label');
+          final open = _shape(t, tab);
+          for (final (other, otherLabel) in _dockTabs) {
+            final r = _shape(t, other);
+            // Above the system navigation, never under its buttons.
+            expect(r.bottom, lessThanOrEqualTo(screen.height - navDp + 0.5),
+                reason: '$otherLabel sits above the nav inset');
+            expect(r.left, greaterThanOrEqualTo(0));
+            expect(r.right, lessThanOrEqualTo(screen.width));
+            // A 48dp target, named for screen readers.
+            final node = _dock(otherLabel);
+            expect(t.getSize(node).width, greaterThanOrEqualTo(48), reason: otherLabel);
+            expect(t.getSize(node).height, greaterThanOrEqualTo(48), reason: otherLabel);
+            if (other != tab) {
+              // A closed item is a round button, narrower than the open pill.
+              expect(r.width, closeTo(r.height, 0.5), reason: '$otherLabel is round');
+              expect(open.width, greaterThan(r.width + 20));
+            }
           }
+          _expectOpenLabel(t, tab, label);
+          // Nothing is painted behind the floating pills.
+          expect(find.byType(NavButtonBacking), findsNothing);
         }
+        handle.dispose();
       });
 
       testWidgets('$mode: "Copied" shows at the top on $where', (t) async {
@@ -125,7 +150,7 @@ void main() {
         addTearDown(() => t.binding.defaultBinaryMessenger
             .setMockMethodCallHandler(SystemChannels.platform, null));
         await _start(t, size, ratio, statusDp, navDp, dark: dark);
-        await t.tap(find.bySemanticsLabel('Tools').last);
+        await t.tap(_dock('Tools'));
         await t.pumpAndSettle();
         await t.tap(find.text('Between Dates').first);
         await t.pumpAndSettle();
@@ -146,7 +171,7 @@ void main() {
             .first);
         for (final header in [
           find.bySemanticsLabel('Back').first,
-          find.descendant(of: find.byType(GlassAppBar).first, matching: find.text('Between Dates')).first,
+          find.descendant(of: find.byType(OneScrollPage).last, matching: find.text('Between Dates')).first,
         ]) {
           expect(pill.overlaps(t.getRect(header)), isFalse,
               reason: 'the toast must not cover the page header');
@@ -177,20 +202,82 @@ void main() {
     }
   });
 
-  testWidgets('the tab bar highlight never leaves the bar mid-spring', (t) async {
-    await _start(t, const Size(720, 1280), 2.0, 24, 48, dark: false);
-    final pills = find.byType(SelectionPill);
-    Rect bar() => t.getRect(find.ancestor(of: pills.first, matching: find.byType(Stack)).first);
-    for (final to in ['Settings', 'Today', 'Settings', 'Today']) {
-      await t.tap(find.bySemanticsLabel(to).last);
-      for (var i = 0; i < 40; i++) {
-        await t.pump(const Duration(milliseconds: 16));
-        final r = t.getRect(pills.first);
-        final b = bar();
-        expect(r.left, greaterThanOrEqualTo(b.left - 0.5), reason: 'toward $to, frame $i');
-        expect(r.right, lessThanOrEqualTo(b.right + 0.5), reason: 'toward $to, frame $i');
+  for (final reduce in [false, true]) {
+    testWidgets(
+        'the open pill follows the selection${reduce ? ' at once with reduced motion' : ' on a spring'}',
+        (t) async {
+      if (reduce) {
+        t.platformDispatcher.accessibilityFeaturesTestValue =
+            const FakeAccessibilityFeatures(disableAnimations: true);
+        addTearDown(t.platformDispatcher.clearAccessibilityFeaturesTestValue);
       }
-      await t.pumpAndSettle();
-    }
-  });
+      await _start(t, const Size(720, 1280), 2.0, 24, 48, dark: false);
+      final round = _shape(t, 1).width;
+      final wide = _shape(t, 0).width;
+      expect(wide, greaterThan(round + 20), reason: 'Today opens as the pill');
+      for (final (tab, label) in [(2, 'Settings'), (1, 'Tools'), (0, 'Today'), (2, 'Settings')]) {
+        final from = _dockTabs.firstWhere((e) => _shape(t, e.$1).width > round + 1).$1;
+        await t.tap(_dock(label));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 60));
+        final mid = _shape(t, tab).width;
+        if (reduce) {
+          // Instant: already at its open width, the old one already round.
+          expect(mid, greaterThan(round + 20), reason: '$label is open at once');
+          expect(_shape(t, from).width, closeTo(round, 0.5));
+          expect(_labelOpacity(t, label), 1.0);
+        }
+        await t.pumpAndSettle();
+        if (!reduce) {
+          // Mid-flight it was widening on its spring: past round, not there yet.
+          expect(mid, inExclusiveRange(round + 0.5, _shape(t, tab).width - 0.5),
+              reason: '$label was widening');
+        }
+        _expectOpenLabel(t, tab, label);
+        expect(_shape(t, from).width, closeTo(round, 0.5),
+            reason: 'the old pill is round again');
+      }
+    });
+  }
+}
+
+/// The dock tabs, in their visual order: (tab index, label).
+const _dockTabs = [(0, 'Today'), (1, 'Tools'), (2, 'Settings')];
+
+/// A dock shape's rect, by tab index.
+Rect _shape(WidgetTester t, int tab) =>
+    t.getRect(find.byKey(ValueKey('dock-$tab')));
+
+/// The open item's label in the dock, or null when it is not painted.
+Finder _dockLabel(String label) => find.descendant(
+    of: find.byType(DateDock), matching: find.text(label));
+
+double _labelOpacity(WidgetTester t, String label) => t
+    .widget<Opacity>(find.ancestor(of: _dockLabel(label), matching: find.byType(Opacity)).first)
+    .opacity;
+
+/// Only the open item shows its label, whole, inside its pill, unscaled.
+void _expectOpenLabel(WidgetTester t, int tab, String label) {
+  for (final (_, other) in _dockTabs) {
+    expect(_dockLabel(other), other == label ? findsOneWidget : findsNothing,
+        reason: other == label ? '$label shows its label' : '$other is icon-only');
+  }
+  final text = _dockLabel(label);
+  final para = t.renderObject<RenderParagraph>(text);
+  expect(para.didExceedMaxLines, isFalse, reason: '$label is not cut');
+  final r = t.getRect(text);
+  final pill = _shape(t, tab);
+  expect(r.left, greaterThanOrEqualTo(pill.left));
+  expect(r.right, lessThanOrEqualTo(pill.right), reason: '$label fits its pill');
+  // Laid out at its natural width (the FittedBox did not have to shrink it).
+  final natural = para.getMaxIntrinsicWidth(double.infinity);
+  expect(r.width, closeTo(natural * _globalScale(t), 1.0),
+      reason: '$label is drawn at full size');
+  expect(_labelOpacity(t, label), 1.0);
+}
+
+/// How much the app's ScaleToWidth shrinks or grows its tree on this screen.
+double _globalScale(WidgetTester t) {
+  final box = t.renderObject<RenderBox>(find.byType(DateDock));
+  return t.getRect(find.byType(DateDock)).width / box.size.width;
 }

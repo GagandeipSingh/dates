@@ -1,15 +1,15 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+
+import 'motion.dart';
 
 import 'glass_surface.dart' show GlassPass;
 
-/// A screen that slides in and out as ONE picture.
+/// The screen under a push drifts aside as ONE picture.
 ///
-/// Every card here is glass, and glass re-reads and re-blurs the screen
-/// behind it on each frame it moves. A push moved two whole screens of it
-/// (the new one sliding in, the old one sliding aside), every frame, and
-/// the open stuttered. While either slide runs, the screen is drawn once
-/// into a picture and the picture is moved; the live screen is back the
-/// moment the slide ends. iOS slides its screens the same way.
+/// While a screen is being covered or uncovered, it is drawn once into a
+/// picture and the picture is moved, so a push on a small phone moves one
+/// live screen instead of two; the live screen is back the moment the
+/// slide ends. iOS slides its screens the same way.
 class StillWhileMoving extends StatefulWidget {
   const StillWhileMoving({
     super.key,
@@ -68,8 +68,13 @@ class _StillWhileMovingState extends State<StillWhileMoving> {
 
   // A finger dragging the screen back (the edge swipe) moves the
   // controller by hand; its status is then forward or reverse too.
-  void _update() => _snap.allowSnapshotting =
-      widget.animation.isAnimating || widget.secondaryAnimation.isAnimating;
+  //
+  // Only the screen UNDERNEATH is a picture. The arriving screen stays live
+  // so its content can assemble as it slides in (StaggerIn): a picture of
+  // it taken on the first frame would slide in blank. Its flat blocks are
+  // cheap to draw.
+  void _update() =>
+      _snap.allowSnapshotting = widget.secondaryAnimation.isAnimating;
 
   @override
   void dispose() {
@@ -87,9 +92,125 @@ class _StillWhileMovingState extends State<StillWhileMoving> {
   );
 }
 
-/// The app's screen push: iOS's slide, moving a still picture of each screen.
-class GlassPageRoute<T> extends CupertinoPageRoute<T> {
-  GlassPageRoute({required super.builder});
+/// How a screen arrives and leaves: shared axis X. The arriving screen
+/// slides in [pageShift] dp from the right and fades in over the first part
+/// of the move; the screen underneath drifts [pageShift] dp left as one
+/// still picture ([StillWhileMoving]). Back is the same move reversed.
+/// While a finger drives it (Android's predictive back) it follows the
+/// finger linearly; otherwise it rides [pageCurve].
+///
+/// Only the ARRIVING screen fades: both fading at once would show the
+/// window's black through the middle of the move.
+const int pageMs = 300;
+const int pageBackMs = 260;
+const double pageShift = 30;
+const Curve pageCurve = Curves.easeOutCubic;
+
+Widget sharedAxisX(
+  BuildContext context,
+  Animation<double> animation,
+  Animation<double> secondaryAnimation,
+  Widget child, {
+  bool linear = false,
+}) {
+  // Read straight from the animations: a route rebuilds its transitions
+  // every frame of them, and a CurvedAnimation made here would add a
+  // listener per frame.
+  double move(Animation<double> a) => linear
+      ? a.value
+      : a.status == AnimationStatus.reverse
+      ? pageCurve.flipped.transform(a.value)
+      : pageCurve.transform(a.value);
+  final dx =
+      pageShift * (1 - move(animation)) - pageShift * move(secondaryAnimation);
+  final f = animation.isCompleted
+      ? 1.0
+      : linear
+      ? animation.value
+      : kFade.transform((animation.value / 0.6).clamp(0.0, 1.0));
+  // One fixed structure at rest and in motion: swapping wrappers would
+  // rebuild the whole screen (and lose its state) when the move ends. At
+  // opacity 1 and no offset both cost nothing.
+  return Opacity(
+    opacity: f.clamp(0.0, 1.0),
+    child: Transform.translate(offset: Offset(dx, 0), child: child),
+  );
+}
+
+/// [sharedAxisX] for any route the theme builds (a MaterialPageRoute from
+/// a package): no Material zoom or Cupertino slide is left in the app.
+class AppPageTransitionsBuilder extends PageTransitionsBuilder {
+  const AppPageTransitionsBuilder();
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: pageMs);
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => sharedAxisX(
+    context,
+    animation,
+    secondaryAnimation,
+    child,
+    linear: route.popGestureInProgress,
+  );
+}
+
+/// The app's screen push, used for every route (test/motion_test): shared
+/// axis X ([sharedAxisX]), [pageMs] in and [pageBackMs] back. The screen
+/// underneath slides as a still picture; the arriving one stays live so its
+/// content can assemble (PageScroll's StaggerIn) as it lands. Android's
+/// predictive back drives the same move with the finger. With reduced
+/// motion the screen simply appears.
+class AppPageRoute<T> extends PageRoute<T> {
+  AppPageRoute({required this.builder, super.settings});
+
+  final WidgetBuilder builder;
+
+  @override
+  Duration get transitionDuration =>
+      _reduce ? Duration.zero : const Duration(milliseconds: pageMs);
+
+  @override
+  Duration get reverseTransitionDuration =>
+      _reduce ? Duration.zero : const Duration(milliseconds: pageBackMs);
+
+  bool get _reduce {
+    final ctx = navigator?.context;
+    return ctx != null && MediaQuery.maybeDisableAnimationsOf(ctx) == true;
+  }
+
+  @override
+  bool get opaque => true;
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  bool canTransitionTo(TransitionRoute<dynamic> nextRoute) =>
+      nextRoute is AppPageRoute;
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) => Semantics(
+    scopesRoute: true,
+    explicitChildNodes: true,
+    child: builder(context),
+  );
 
   @override
   Widget buildTransitions(
@@ -97,7 +218,7 @@ class GlassPageRoute<T> extends CupertinoPageRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
     Widget child,
-  ) => super.buildTransitions(
+  ) => sharedAxisX(
     context,
     animation,
     secondaryAnimation,
@@ -106,5 +227,6 @@ class GlassPageRoute<T> extends CupertinoPageRoute<T> {
       secondaryAnimation: secondaryAnimation,
       child: child,
     ),
+    linear: popGestureInProgress,
   );
 }

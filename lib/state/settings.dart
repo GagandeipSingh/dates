@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -138,13 +140,60 @@ const dateFormats = <String>[
 
 enum Appearance { system, light, dark }
 
-class Settings extends ChangeNotifier {
-  Settings._(this._prefs);
+/// Whether this platform has the daily date icon at all (Android only).
+bool get dateIconSupported =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  static Future<Settings> load() async =>
-      Settings._(await SharedPreferences.getInstance());
+/// The native "Daily date icon" switch. Native (DateIcon.kt) owns the value;
+/// Dart only reads it at start and asks native to change it.
+const dateIconChannel = MethodChannel('com.blessing.dates/date_icon');
+
+class Settings extends ChangeNotifier {
+  Settings._(this._prefs, this._dailyIcon);
+
+  static Future<Settings> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    var daily = true;
+    if (dateIconSupported) {
+      try {
+        daily =
+            await dateIconChannel.invokeMethod<bool>('getDailyIcon') ?? true;
+      } on Exception {
+        // No native side (a test, a host without the channel): the default.
+      }
+    }
+    return Settings._(prefs, daily);
+  }
 
   final SharedPreferences _prefs;
+
+  /// "Daily date icon": the launcher icon shows today's date. Off keeps one
+  /// fixed icon. Seeded from native at start; native is the source of truth.
+  bool get dailyIcon => _dailyIcon;
+  bool _dailyIcon;
+  set dailyIcon(bool v) {
+    if (v == _dailyIcon) return;
+    _dailyIcon = v;
+    notifyListeners();
+    _sendDailyIcon(v);
+  }
+
+  Future<void> _sendDailyIcon(bool v) async {
+    try {
+      final stored = await dateIconChannel.invokeMethod<bool>(
+        'setDailyIcon',
+        {'on': v},
+      );
+      // Native's answer wins should it refuse this change, unless the user
+      // has flipped the switch again since (a later call is on its way).
+      if (stored != null && stored != v && _dailyIcon == v) {
+        _dailyIcon = stored;
+        notifyListeners();
+      }
+    } on Exception {
+      // No native side: the switch still reads what the user chose.
+    }
+  }
 
   Appearance get appearance =>
       Appearance.values[(_prefs.getInt('appearance') ?? 0).clamp(0, 2)];
