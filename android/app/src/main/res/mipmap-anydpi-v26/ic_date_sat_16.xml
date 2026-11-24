@@ -4,10 +4,10 @@
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground>
         <inset
-            android:insetLeft="7%"
-            android:insetTop="6.9%"
-            android:insetRight="7%"
-            android:insetBottom="7.1%">
+            android:insetLeft="4%"
+            android:insetTop="4.2%"
+            android:insetRight="4%"
+            android:insetBottom="3.8%">
             <layer-list>
                 <item android:drawable="@drawable/date_wd_sat" />
                 <item android:drawable="@drawable/date_day_16" />
@@ -16,10 +16,10 @@
     </foreground>
     <monochrome>
         <inset
-            android:insetLeft="7%"
-            android:insetTop="6.9%"
-            android:insetRight="7%"
-            android:insetBottom="7.1%">
+            android:insetLeft="4%"
+            android:insetTop="4.2%"
+            android:insetRight="4%"
+            android:insetBottom="3.8%">
             <layer-list>
                 <item android:drawable="@drawable/date_wd_sat" />
                 <item android:drawable="@drawable/date_day_16" />

@@ -289,8 +289,12 @@ class _DateDockState extends State<DateDock> {
                 // The label follows the widening: in over its later part,
                 // sliding the last few dp.
                 final lv = ((v - 0.25) / 0.75).clamp(0.0, 1.0);
+                // Whole device pixels: a fractional width moved the
+                // neighbours by part of a pixel each frame, which read as
+                // a shimmer on a low-density screen.
+                final dpr = MediaQuery.devicePixelRatioOf(context);
                 return Container(
-                  width: size + (wide - size) * v,
+                  width: ((size + (wide - size) * v) * dpr).round() / dpr,
                   height: size,
                   decoration: BoxDecoration(
                     // A step lighter than the cards in dark, so the shapes

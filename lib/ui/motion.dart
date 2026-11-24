@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'one_ui.dart';
 
@@ -352,6 +354,88 @@ class _StaggerScopeState extends State<StaggerScope> {
 /// one fades in and grows from [scaleFrom] on [kSnap], [ms] in all. The two
 /// overlap a little, so there is never an empty frame. Instant with reduced
 /// motion.
+/// Whether this phone keeps up with the full tab switch. Measured, not
+/// guessed: the frames of a switch are timed, and a phone that misses the
+/// 60 fps budget on several of them gets the light switch from then on,
+/// remembered across launches. The light switch fades the new tab in alone:
+/// no scale (which re-rasters the whole screen every frame) and no
+/// cross-fade of two whole screens at once. A phone that keeps up keeps the
+/// full switch (owner, 2026-11-24: smooth on a good phone, jittery on a
+/// slower one).
+class MotionBudget {
+  MotionBudget._();
+
+  static const String prefsKey = 'motion_lite';
+  static const Duration frameBudget = Duration(microseconds: 16667);
+
+  /// Slow frames in one switch that mark the phone as slow.
+  static const int slowFramesToLite = 3;
+
+  /// Frame timings arrive in batches, about once a second in release, so
+  /// the watch stays open a little past the switch itself.
+  static const Duration window = Duration(milliseconds: 1500);
+
+  static bool lite = false;
+  static bool _loaded = false;
+  static int _slow = 0;
+  static bool _watching = false;
+
+  /// Time since the switch started. A stopwatch, not a timer: nothing is
+  /// left pending, and the watch ends on the first batch past [window].
+  static final Stopwatch _since = Stopwatch();
+
+  static Future<void> load() async {
+    if (_loaded) return;
+    _loaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      lite = lite || (prefs.getBool(prefsKey) ?? false);
+    } catch (_) {
+      // No prefs (a widget test): measure afresh this session.
+    }
+  }
+
+  /// Called as a tab switch starts.
+  static void watchSwitch() {
+    // A debug build is slow by nature; its frames say nothing about the
+    // phone, and a verdict from one would stick.
+    if (lite || kDebugMode) return;
+    _slow = 0;
+    _since
+      ..reset()
+      ..start();
+    if (!_watching) {
+      _watching = true;
+      SchedulerBinding.instance.addTimingsCallback(_onTimings);
+    }
+  }
+
+  static void _stop() {
+    if (!_watching) return;
+    _watching = false;
+    _since.stop();
+    SchedulerBinding.instance.removeTimingsCallback(_onTimings);
+  }
+
+  static void _onTimings(List<FrameTiming> timings) {
+    if (lite) return _stop();
+    for (final t in timings) {
+      if (t.buildDuration > frameBudget || t.rasterDuration > frameBudget) {
+        _slow++;
+      }
+    }
+    if (_slow < slowFramesToLite) {
+      if (_since.elapsed > window) _stop();
+      return;
+    }
+    lite = true;
+    _stop();
+    SharedPreferences.getInstance()
+        .then((p) => p.setBool(prefsKey, true))
+        .catchError((_) => false);
+  }
+}
+
 class FadeThroughTabs extends StatefulWidget {
   const FadeThroughTabs({
     super.key,
@@ -386,9 +470,30 @@ class _FadeThroughTabsState extends State<FadeThroughTabs>
 
   Timer? _warm;
 
+  /// The tab being left is faded as ONE still picture, the way a screen
+  /// under a push slides (StillWhileMoving in page_motion.dart): a switch
+  /// on a slow phone then draws one live tab instead of two. The arriving
+  /// tab stays live, so its content is never a stale picture.
+  late final List<SnapshotController> _snaps = List.generate(
+    widget.count,
+    (_) => SnapshotController(),
+  );
+
+  void _updateSnaps() {
+    final moving = _c.isAnimating && _from != widget.index;
+    for (var i = 0; i < _snaps.length; i++) {
+      final want = moving && i == _from;
+      if (_snaps[i].allowSnapshotting != want) {
+        _snaps[i].allowSnapshotting = want;
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _c.addStatusListener((_) => _updateSnaps());
+    MotionBudget.load();
     _warm = Timer(const Duration(milliseconds: 900), _warmNext);
   }
 
@@ -421,13 +526,18 @@ class _FadeThroughTabsState extends State<FadeThroughTabs>
     if (MediaQuery.disableAnimationsOf(context)) {
       _c.value = 1;
     } else {
+      MotionBudget.watchSwitch();
       _c.forward(from: 0);
     }
+    _updateSnaps();
   }
 
   @override
   void dispose() {
     _warm?.cancel();
+    for (final s in _snaps) {
+      s.dispose();
+    }
     _c.dispose();
     super.dispose();
   }
@@ -442,7 +552,9 @@ class _FadeThroughTabsState extends State<FadeThroughTabs>
       builder: (context, _) {
         final t = _c.value;
         final moving = t < 1 && _from != widget.index;
-        final inT = ((t - start) / (1 - start)).clamp(0.0, 1.0);
+        // A slow phone: the new tab fades in alone, from the first frame.
+        final lite = MotionBudget.lite;
+        final inT = lite ? t : ((t - start) / (1 - start)).clamp(0.0, 1.0);
         final outT = (t * total / FadeThroughTabs.outMs).clamp(0.0, 1.0);
         return Stack(
           fit: StackFit.expand,
@@ -451,11 +563,12 @@ class _FadeThroughTabsState extends State<FadeThroughTabs>
               if (_built[i] != null)
                 _layer(
                   i,
-                  visible: i == widget.index || (moving && i == _from),
+                  visible:
+                      i == widget.index || (moving && !lite && i == _from),
                   opacity: i == widget.index
                       ? (moving ? kFade.transform(inT) : 1)
                       : 1 - kFade.transform(outT),
-                  scale: i == widget.index && moving
+                  scale: i == widget.index && moving && !lite
                       ? FadeThroughTabs.scaleFrom +
                             (1 - FadeThroughTabs.scaleFrom) *
                                 kSnap.transform(inT)
@@ -488,7 +601,14 @@ class _FadeThroughTabsState extends State<FadeThroughTabs>
               opacity: opacity.clamp(0.0, 1.0),
               child: Transform.scale(
                 scale: scale,
-                child: RepaintBoundary(child: _built[i]),
+                child: RepaintBoundary(
+                  child: SnapshotWidget(
+                    controller: _snaps[i],
+                    // Anything that cannot be a picture is drawn live.
+                    mode: SnapshotMode.permissive,
+                    child: _built[i],
+                  ),
+                ),
               ),
             ),
           ),

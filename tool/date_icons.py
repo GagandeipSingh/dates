@@ -9,8 +9,9 @@ for every weekday and every day: it reads the stretch and the baselines off
 letter and figure keeps the shape it has in the shipped icon. A word is never
 re-stretched to fill a box ("1" stays one figure wide, as it would in print).
 
-The daily icons are drawn heavier than that original (owner's call,
-2026-11-24: weekday 800, date 560, weekday a little lower), so --check no longer matches fg.png.
+The weekday sits a little lower than in that original (owner's call,
+2026-11-24: 0.18 to 0.20); the weights are the original's. A bolder
+version (800/560) was tried that day and rolled back.
 
 Output, all under android/app/src/main (rerun after changing anything here):
   res/drawable/date_wd_<mon..sun>.xml       the weekday, a vector
@@ -57,8 +58,8 @@ T = int(1024 * 0.667) * SS
 TOP = (N - T) / 2
 WORDS = {
     # role: (reference text, weight, box w, box h, centre y, colour)
-    'wd': ('WED', 800, T * 0.385, T * 0.11, 0.205, RED),
-    'day': ('28', 560, T * 0.67, T * 0.42, 0.58, INK),
+    'wd': ('WED', 720, T * 0.385, T * 0.11, 0.20, RED),
+    'day': ('28', 430, T * 0.67, T * 0.42, 0.58, INK),
 }
 PIL_SIZE = 400  # the size the original laid the word out at
 FLAG_HANG = 0.5  # how much of a leading 1's flag hangs outside (Face.middle)
@@ -181,7 +182,9 @@ def vector(d, colour):
 # read as crowded (owner, 2026-11-23). PAD_SCALE shrinks the two words as
 # one block and the insets centre that block in the circle; both are
 # Android's own <inset>, so the glyphs are untouched.
-PAD_SCALE = 0.86
+# 0.86 at first; 0.92 after the bolder glyphs (owner, 2026-11-24: "slightly
+# less padding").
+PAD_SCALE = 0.92
 # Above true centre by this much of the icon: the heavy date at the bottom
 # makes a block centred by its ink look low (owner, 2026-11-23), so it sits
 # at the optical centre instead.
