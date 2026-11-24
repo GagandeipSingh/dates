@@ -9,6 +9,9 @@ for every weekday and every day: it reads the stretch and the baselines off
 letter and figure keeps the shape it has in the shipped icon. A word is never
 re-stretched to fill a box ("1" stays one figure wide, as it would in print).
 
+The daily icons are drawn heavier than that original (owner's call,
+2026-11-24: weekday 800, date 560, weekday a little lower), so --check no longer matches fg.png.
+
 Output, all under android/app/src/main (rerun after changing anything here):
   res/drawable/date_wd_<mon..sun>.xml       the weekday, a vector
   res/drawable/date_day_<1..31>.xml         the date, a vector
@@ -54,8 +57,8 @@ T = int(1024 * 0.667) * SS
 TOP = (N - T) / 2
 WORDS = {
     # role: (reference text, weight, box w, box h, centre y, colour)
-    'wd': ('WED', 720, T * 0.385, T * 0.11, 0.18, RED),
-    'day': ('28', 430, T * 0.67, T * 0.42, 0.58, INK),
+    'wd': ('WED', 800, T * 0.385, T * 0.11, 0.205, RED),
+    'day': ('28', 560, T * 0.67, T * 0.42, 0.58, INK),
 }
 PIL_SIZE = 400  # the size the original laid the word out at
 FLAG_HANG = 0.5  # how much of a leading 1's flag hangs outside (Face.middle)

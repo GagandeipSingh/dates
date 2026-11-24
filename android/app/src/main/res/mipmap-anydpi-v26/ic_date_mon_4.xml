@@ -5,9 +5,9 @@
     <foreground>
         <inset
             android:insetLeft="7%"
-            android:insetTop="7.6%"
+            android:insetTop="6.9%"
             android:insetRight="7%"
-            android:insetBottom="6.4%">
+            android:insetBottom="7.1%">
             <layer-list>
                 <item android:drawable="@drawable/date_wd_mon" />
                 <item android:drawable="@drawable/date_day_4" />
@@ -17,9 +17,9 @@
     <monochrome>
         <inset
             android:insetLeft="7%"
-            android:insetTop="7.6%"
+            android:insetTop="6.9%"
             android:insetRight="7%"
-            android:insetBottom="6.4%">
+            android:insetBottom="7.1%">
             <layer-list>
                 <item android:drawable="@drawable/date_wd_mon" />
                 <item android:drawable="@drawable/date_day_4" />
