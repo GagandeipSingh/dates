@@ -117,8 +117,9 @@ class DateDock extends StatefulWidget {
 }
 
 class _DateDockState extends State<DateDock> {
-  // The widening and shrinking: ratio 0.92, at rest in ~280ms.
-  static final SpringDescription _widen = springFor(0.92, 280);
+  // The widening and shrinking: ratio 0.92, at rest in ~240ms (280 read
+  // as slow on a low-end phone, 2026-11-24).
+  static final SpringDescription _widen = springFor(0.92, 240);
 
   static const _labelStyle = TextStyle(
     fontSize: 16,
@@ -179,12 +180,7 @@ class _DateDockState extends State<DateDock> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              bg.withValues(alpha: 0),
-              bg.withValues(alpha: 0),
-              bg,
-              bg,
-            ],
+            colors: [bg.withValues(alpha: 0), bg.withValues(alpha: 0), bg, bg],
             stops: [0, solidFrom, solidFrom, 1],
           ),
         ),
@@ -223,13 +219,18 @@ class _DateDockState extends State<DateDock> {
                   children: [
                     for (var i = 0; i < n; i++) ...[
                       if (i > 0) SizedBox(width: gap),
-                      _shape(
-                        context,
-                        p,
-                        widget.items[i],
-                        size,
-                        pill,
-                        labelSpace,
+                      // Each shape repaints alone while it widens or
+                      // shrinks; the still one and the page keep their
+                      // pictures.
+                      RepaintBoundary(
+                        child: _shape(
+                          context,
+                          p,
+                          widget.items[i],
+                          size,
+                          pill,
+                          labelSpace,
+                        ),
                       ),
                     ],
                   ],

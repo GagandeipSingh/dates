@@ -709,7 +709,11 @@ class DateTimeField extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: 6.dp),
-                    Icon(PhosphorIconsFill.calendarBlank, size: 18.dp, color: p.accent),
+                    Icon(
+                      PhosphorIconsFill.calendarBlank,
+                      size: 18.dp,
+                      color: p.accent,
+                    ),
                   ],
                 ),
               ),

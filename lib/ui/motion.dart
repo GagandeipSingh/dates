@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/physics.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'one_ui.dart';
@@ -192,14 +194,24 @@ class _SpringValueState extends State<SpringValue>
       _c.value = widget.value;
       return;
     }
-    _c.animateWith(
-      SpringSimulation(
-        widget.spring ?? kSnapSpring,
-        _c.value,
-        widget.value,
-        _c.velocity,
-      ),
-    );
+    final to = widget.value;
+    _c
+        .animateWith(
+          SpringSimulation(
+            widget.spring ?? kSnapSpring,
+            _c.value,
+            to,
+            _c.velocity,
+          ),
+        )
+        .orCancel
+        .then((_) {
+          // A spring stops inside its tolerance, a hair short of the
+          // target (0.9999997). Land it exactly, or what it drives stays
+          // a hair off for as long as it rests there: an opacity of
+          // 0.9999997 keeps a layer alive under the open pill's label.
+          if (mounted && widget.value == to) _c.value = to;
+        }, onError: (_) {});
   }
 
   @override
@@ -297,7 +309,10 @@ class _StaggerInState extends State<StaggerIn>
       builder: (context, child) => Opacity(
         opacity: c.isCompleted ? 1 : _fade.value.clamp(0.0, 1.0),
         child: Transform.translate(
-          offset: Offset(0, c.isCompleted ? 0 : widget.rise * (1 - _move.value)),
+          offset: Offset(
+            0,
+            c.isCompleted ? 0 : widget.rise * (1 - _move.value),
+          ),
           child: child,
         ),
       ),
@@ -369,6 +384,35 @@ class _FadeThroughTabsState extends State<FadeThroughTabs>
     value: 1,
   );
 
+  Timer? _warm;
+
+  @override
+  void initState() {
+    super.initState();
+    _warm = Timer(const Duration(milliseconds: 900), _warmNext);
+  }
+
+  /// Builds the tabs not yet visited, one per frame, a moment after
+  /// launch, offstage and with their tickers off. Building a tab is the
+  /// heaviest thing a switch did, and it landed on the tap's own frame:
+  /// on a slow phone the dock's pill dropped its first frames and the
+  /// widening read as slow (2026-11-24). Warmed, a first visit costs what
+  /// a return does.
+  void _warmNext() {
+    _warm = null;
+    if (!mounted) return;
+    final i = _built.indexOf(null);
+    if (i < 0) return;
+    setState(() => _built[i] = _tab(context, i));
+    if (!_built.contains(null)) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _warm = Timer(Duration.zero, _warmNext);
+    });
+  }
+
+  Widget _tab(BuildContext context, int i) =>
+      KeyedSubtree(key: ValueKey('tab-$i'), child: widget.builder(context, i));
+
   @override
   void didUpdateWidget(FadeThroughTabs old) {
     super.didUpdateWidget(old);
@@ -383,16 +427,14 @@ class _FadeThroughTabsState extends State<FadeThroughTabs>
 
   @override
   void dispose() {
+    _warm?.cancel();
     _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    _built[widget.index] ??= KeyedSubtree(
-      key: ValueKey('tab-${widget.index}'),
-      child: widget.builder(context, widget.index),
-    );
+    _built[widget.index] ??= _tab(context, widget.index);
     const total = FadeThroughTabs.ms;
     const start = FadeThroughTabs.inStartMs / total;
     return AnimatedBuilder(

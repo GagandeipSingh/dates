@@ -443,6 +443,34 @@ class _OneScrollPageState extends State<OneScrollPage> {
   bool _snapping = false;
   double _range = 0;
 
+  /// Holds the big title shut against a scroll that did not start as a
+  /// pull from rest at the collapsed bar (owner's call, 2026-11-24): a
+  /// fling back up stops at the small bar, where the content began, and
+  /// the big centred title opens only when the page is already resting
+  /// there and the user pulls down.
+  final _gate = _HeaderGate();
+  late _HeaderGatePhysics _physics = _HeaderGatePhysics(
+    _gate,
+    parent: widget.physics,
+  );
+
+  @override
+  void didUpdateWidget(OneScrollPage old) {
+    super.didUpdateWidget(old);
+    if (old.physics != widget.physics) {
+      _physics = _HeaderGatePhysics(_gate, parent: widget.physics);
+    }
+  }
+
+  bool _onStart(ScrollStartNotification n) {
+    if (n.depth != 0 || !_c.hasClients) return false;
+    // Only a finger that lands while the bar is already collapsed (or the
+    // title already open) may pull the title open. A fling's momentum and a
+    // drag that began down in the content stop at the bar.
+    _gate.locked = !(n.dragDetails != null && _c.offset <= _range + 0.5);
+    return false;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -500,44 +528,80 @@ class _OneScrollPageState extends State<OneScrollPage> {
       expandable: widget.expandable,
     );
     _range = expanded - collapsed;
-    return NotificationListener<ScrollEndNotification>(
-      onNotification: _onEnd,
-      child: CustomScrollView(
-        controller: _c,
-        physics: widget.physics,
-        slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _OneHeader(
-              title: widget.title,
-              subtitle: widget.subtitle,
-              leading: widget.leading,
-              actions: widget.actions,
-              top: top,
-              min: collapsed,
-              max: expanded,
-              palette: OnePalette.of(context),
-              textScaler: MediaQuery.textScalerOf(context),
+    _gate.range = _range;
+    return NotificationListener<ScrollStartNotification>(
+      onNotification: _onStart,
+      child: NotificationListener<ScrollEndNotification>(
+        onNotification: _onEnd,
+        child: CustomScrollView(
+          controller: _c,
+          physics: _physics,
+          slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _OneHeader(
+                title: widget.title,
+                subtitle: widget.subtitle,
+                leading: widget.leading,
+                actions: widget.actions,
+                top: top,
+                min: collapsed,
+                max: expanded,
+                palette: OnePalette.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              ),
             ),
-          ),
-          ...widget.slivers,
-          SliverToBoxAdapter(child: SizedBox(height: widget.bottomPadding)),
-          // When the content is short, room to collapse the bar fully, so a
-          // snap to "collapsed" has somewhere to go.
-          if (_range > 0)
-            SliverLayoutBuilder(
-              builder: (context, c) => SliverToBoxAdapter(
-                child: SizedBox(
-                  height: math.max(
-                    0.0,
-                    c.viewportMainAxisExtent + _range - c.precedingScrollExtent,
+            ...widget.slivers,
+            SliverToBoxAdapter(child: SizedBox(height: widget.bottomPadding)),
+            // When the content is short, room to collapse the bar fully, so a
+            // snap to "collapsed" has somewhere to go.
+            if (_range > 0)
+              SliverLayoutBuilder(
+                builder: (context, c) => SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: math.max(
+                      0.0,
+                      c.viewportMainAxisExtent +
+                          _range -
+                          c.precedingScrollExtent,
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+}
+
+class _HeaderGate {
+  bool locked = false;
+  double range = 0;
+}
+
+/// Stops a scroll at the collapsed bar while [_HeaderGate.locked]: the
+/// offsets below [_HeaderGate.range] are the big title, and only a pull
+/// from rest may reach them.
+class _HeaderGatePhysics extends ScrollPhysics {
+  const _HeaderGatePhysics(this.gate, {super.parent});
+  final _HeaderGate gate;
+
+  @override
+  _HeaderGatePhysics applyTo(ScrollPhysics? ancestor) =>
+      _HeaderGatePhysics(gate, parent: buildParent(ancestor));
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    final r = gate.range;
+    if (gate.locked &&
+        r > 0 &&
+        value < position.pixels &&
+        position.pixels >= r - 0.5 &&
+        value < r) {
+      return value - r;
+    }
+    return super.applyBoundaryConditions(position, value);
   }
 }
 

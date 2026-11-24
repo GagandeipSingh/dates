@@ -492,6 +492,70 @@ void main() {
     );
   }
 
+  testWidgets('a fling back up stops at the bar; only a pull from rest opens '
+      'the big title', (t) async {
+    // Samsung's own lists: scrolling back up lands on the collapsed bar,
+    // where the content began; the big centred title opens only when the
+    // page is already resting there and the user pulls down (2026-11-24).
+    t.view.physicalSize = const Size(1080, 2400);
+    t.view.devicePixelRatio = 2.625;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(
+      MaterialApp(
+        theme: oneUiTheme(Brightness.light),
+        home: Scaffold(
+          body: OneScrollPage(
+            title: 'Settings',
+            slivers: [
+              SliverList.list(
+                children: [
+                  for (var i = 0; i < 60; i++) OneListRow(title: 'Row $i'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+    final list = find.byType(CustomScrollView);
+    final c = t.widget<CustomScrollView>(list).controller!;
+    final (min, max) = OneScrollPage.extents(
+      t.element(find.byType(OneScrollPage)),
+    );
+    final range = max - min;
+    expect(c.offset, closeTo(range, 0.5));
+    // Down into the content, then a hard fling back up: momentum stops at
+    // the bar, never runs on into the big title.
+    await t.drag(list, const Offset(0, -900));
+    await t.pumpAndSettle();
+    expect(c.offset, greaterThan(range + 300));
+    await t.fling(list, const Offset(0, 600), 6000);
+    await t.pumpAndSettle();
+    expect(c.offset, closeTo(range, 0.5));
+    // One long drag that starts in the content and carries on down also
+    // stops at the bar.
+    await t.drag(list, const Offset(0, -400));
+    await t.pumpAndSettle();
+    await t.drag(list, const Offset(0, 1200));
+    await t.pumpAndSettle();
+    expect(c.offset, closeTo(range, 0.5));
+    // Now at rest on the bar, a pull down opens the big title.
+    await t.drag(list, const Offset(0, 400));
+    await t.pumpAndSettle();
+    expect(c.offset, 0);
+    expect(
+      t
+          .widgetList<Text>(find.text('Settings'))
+          .any((w) => w.style?.fontSize == OneUi.titleExpanded),
+      isTrue,
+    );
+    // And from the open title, scrolling up collapses it as before.
+    await t.drag(list, const Offset(0, -500));
+    await t.pumpAndSettle();
+    expect(c.offset, greaterThan(range));
+  });
+
   testWidgets('a page opens collapsed; pulling down shows the big title', (
     t,
   ) async {
