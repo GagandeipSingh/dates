@@ -180,6 +180,10 @@ class OnePalette {
     var changed = false;
     if (dark && hsl.lightness < 0.55) {
       hsl = hsl.withLightness(0.66);
+      // A near-grey accent (Graphite) lifted alone turns the same pale grey
+      // as secondary text, so a selection stops reading as one: it keeps a
+      // little colour (owner, 2026-11-25).
+      if (hsl.saturation < 0.35) hsl = hsl.withSaturation(0.45);
       changed = true;
     }
     if (!dark && hsl.lightness > 0.62) {

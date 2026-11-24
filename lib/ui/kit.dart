@@ -61,8 +61,10 @@ class Pal {
     // saturated colour carries itself by its chroma, so the vivid accents are
     // left exactly as shipped. We lift lightness only when there is little
     // colour to rely on.
-    if (hsl.saturation < 0.25 && hsl.lightness < 0.62) {
-      return hsl.withLightness(0.70).toColor();
+    if (hsl.saturation < 0.35 && hsl.lightness < 0.62) {
+      // ...and a little colour with it, or the lifted accent is the same
+      // pale grey as secondary text (see OnePalette.readablePrimary).
+      return hsl.withLightness(0.70).withSaturation(0.45).toColor();
     }
     return c;
   }

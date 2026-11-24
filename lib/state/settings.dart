@@ -14,10 +14,15 @@ class Accent {
   final List<Color> dark;
 }
 
+// Coral, Ocean, Iris and Rose were toned to sit beside Mint, Sunset and
+// Graphite (owner, 2026-11-25: those three looked right, the rest too loud):
+// same hues, saturation brought from 76-89% to 55-65%, a touch deeper.
+// Graphite took a touch of blue (saturation 16% to 30%) the same day: a
+// near-grey accent read as ordinary grey text wherever it marked a choice.
 const accents = <Accent>[
   Accent(
     'Coral',
-    Color(0xFFF2564B),
+    Color(0xFFD9584A),
     [
       Color(0xFFFFE3D6),
       Color(0xFFFFC7C2),
@@ -33,7 +38,7 @@ const accents = <Accent>[
   ),
   Accent(
     'Ocean',
-    Color(0xFF1E7BF2),
+    Color(0xFF3B7BDB),
     [
       Color(0xFFD7ECFF),
       Color(0xFFC6DBFF),
@@ -49,7 +54,7 @@ const accents = <Accent>[
   ),
   Accent(
     'Iris',
-    Color(0xFF6A4CF5),
+    Color(0xFF7068E0),
     [
       Color(0xFFE6E0FF),
       Color(0xFFD4CCFF),
@@ -97,7 +102,7 @@ const accents = <Accent>[
   ),
   Accent(
     'Rose',
-    Color(0xFFE5407F),
+    Color(0xFFD04F80),
     [
       Color(0xFFFFDDEA),
       Color(0xFFFFCCE0),
@@ -113,7 +118,7 @@ const accents = <Accent>[
   ),
   Accent(
     'Graphite',
-    Color(0xFF4A5568),
+    Color(0xFF4C6A90),
     [
       Color(0xFFEDEFF3),
       Color(0xFFDDE2EA),
