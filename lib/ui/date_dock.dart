@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -32,18 +33,24 @@ class DockItem {
 }
 
 /// What an item does when it is chosen, beyond turning on.
+/// A dock icon's touch starts this long after the tap, so it plays after
+/// the finger has lifted rather than hidden under it (owner, 2026-11-25).
+const int kDockTouchDelayMs = 220;
+
 enum DockIconKind {
   /// Nothing more.
   plain,
 
-  /// A tiny wiggle (a tool picked up).
+  /// A wiggle with a slight grow (a tool picked up). Made bigger on
+  /// 2026-11-25 (owner: "more visible"); a lift-and-settle was tried that
+  /// day instead and the owner preferred the wiggle.
   wiggle,
 
   /// A 60 degree turn (a gear).
   turn,
 
-  /// The live calendar tile: today's day number and weekday, flipped like a
-  /// tear-off page when tapped again.
+  /// Today's sun: it sets a little and rises back when chosen or tapped
+  /// again.
   today,
 }
 
@@ -423,38 +430,73 @@ class _DockIconState extends State<_DockIcon>
   // 0..1 per touch; the gear's turn accumulates so it never snaps back.
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 320),
+    // The wiggle runs longer than the gear's turn so both swings read.
+    duration: Duration(
+      milliseconds: widget.item.kind == DockIconKind.wiggle ? 520 : 320,
+    ),
     value: 1,
   );
   int _turns = 0;
 
+  ValueNotifier<int>? _retap;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Tapped again while open, the icon plays its touch again, as Today's
+    // flips (owner, 2026-11-25: every tab answers a re-tap).
+    final r = _DockRetap.maybeOf(context);
+    if (r != null && r != _retap) {
+      _retap?.removeListener(_onRetap);
+      _retap = r..addListener(_onRetap);
+    }
+  }
+
+  void _onRetap() {
+    if (widget.on) _play();
+  }
+
+  Timer? _pending;
+
+  void _play() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      if (widget.item.kind == DockIconKind.turn) _turns++;
+      _c.value = 1;
+      return;
+    }
+    // After the finger lifts (kDockTouchDelayMs). The gear's turn is
+    // counted when it starts, or the icon would jump to the new angle first.
+    _pending?.cancel();
+    _pending = Timer(const Duration(milliseconds: kDockTouchDelayMs), () {
+      if (!mounted) return;
+      if (widget.item.kind == DockIconKind.turn) _turns++;
+      _c.forward(from: 0);
+    });
+  }
+
   @override
   void didUpdateWidget(_DockIcon old) {
     super.didUpdateWidget(old);
-    if (widget.on && !old.on) {
-      if (widget.item.kind == DockIconKind.turn) _turns++;
-      if (MediaQuery.disableAnimationsOf(context)) {
-        _c.value = 1;
-      } else {
-        _c.forward(from: 0);
-      }
-    }
+    if (widget.on && !old.on) _play();
   }
 
   @override
   void dispose() {
+    _pending?.cancel();
+    _retap?.removeListener(_onRetap);
     _c.dispose();
     super.dispose();
   }
 
   double _angle(double t) => switch (widget.item.kind) {
     // 60 degrees per selection, eased out, never back.
+    // About 10 degrees each way (owner, 2026-11-25), two swings, dying out.
+    DockIconKind.wiggle => 0.175 * math.sin(t * 4 * math.pi) * (1 - t),
     DockIconKind.turn =>
       _turns == 0
           ? 0
           : (_turns - 1 + Curves.easeOutCubic.transform(t)) * math.pi / 3,
     // A quick, damped shake of about 8 degrees.
-    DockIconKind.wiggle => 0.14 * math.sin(t * 3 * math.pi) * (1 - t),
     _ => 0,
   };
 
@@ -463,8 +505,19 @@ class _DockIconState extends State<_DockIcon>
     final it = widget.item;
     return AnimatedBuilder(
       animation: _c,
-      builder: (context, child) =>
-          Transform.rotate(angle: _angle(_c.value), child: child),
+      builder: (context, child) {
+        final rotated = Transform.rotate(
+          angle: _angle(_c.value),
+          child: child,
+        );
+        if (widget.item.kind != DockIconKind.wiggle) return rotated;
+        // It grows 12% as the wiggle starts and settles as it dies out.
+        final scale = 1 + 0.12 * math.sin(math.pi * _c.value);
+        return Transform.scale(
+          scale: scale,
+          child: rotated,
+        );
+      },
       // Outline to filled: a short cross-fade with a slight grow.
       child: AnimatedSwitcher(
         duration: motion(context, kFadeMs),
@@ -490,8 +543,10 @@ class _DockIconState extends State<_DockIcon>
 
 /// Today's icon: a calendar glyph with today's day number inside, outline
 /// when idle, filled when chosen (the number then cut out in the circle's
-/// colour). Tapped while chosen it flips over (rotateX, 280ms) like a torn
-/// calendar page.
+/// colour). Chosen, or tapped again while chosen, the sun SHINES (600ms):
+/// a ring of light spreads from it and fades while the sun swells a little
+/// and settles. Tried first and set aside by the owner on 2026-11-25: a
+/// full rotateX flip (280ms, then 480ms) and a sink-and-rise.
 class _TodayGlyph extends StatefulWidget {
   const _TodayGlyph({
     required this.day,
@@ -514,7 +569,7 @@ class _TodayGlyphState extends State<_TodayGlyph>
     with SingleTickerProviderStateMixin {
   late final AnimationController _flip = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 280),
+    duration: const Duration(milliseconds: 600),
     value: 1,
   );
 
@@ -532,12 +587,31 @@ class _TodayGlyphState extends State<_TodayGlyph>
   }
 
   void _onRetap() {
-    if (!widget.on || MediaQuery.disableAnimationsOf(context)) return;
-    _flip.forward(from: 0);
+    if (widget.on) _play();
+  }
+
+  Timer? _pending;
+
+  void _play() {
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    // After the finger lifts (kDockTouchDelayMs).
+    _pending?.cancel();
+    _pending = Timer(const Duration(milliseconds: kDockTouchDelayMs), () {
+      if (mounted) _flip.forward(from: 0);
+    });
+  }
+
+  @override
+  void didUpdateWidget(_TodayGlyph old) {
+    super.didUpdateWidget(old);
+    // Chosen from another tab, it shines as Tools wiggles and the gear
+    // turns (owner, 2026-11-25: every tab plays its touch when chosen).
+    if (widget.on && !old.on) _play();
   }
 
   @override
   void dispose() {
+    _pending?.cancel();
     _retap?.removeListener(_onRetap);
     _flip.dispose();
     super.dispose();
@@ -555,13 +629,36 @@ class _TodayGlyphState extends State<_TodayGlyph>
       animation: _flip,
       child: glyph,
       builder: (context, child) {
-        final t = Curves.easeInOutCubic.transform(_flip.value);
-        return Transform(
+        final v = _flip.value;
+        // The sun swells over the first third and settles over the rest.
+        const peak = 0.3;
+        final h = v < peak
+            ? Curves.easeOutCubic.transform(v / peak)
+            : 1 - Curves.easeInOutCubic.transform((v - peak) / (1 - peak));
+        final scale = 1 + 0.1 * h;
+        // The ring spreads over the whole run and fades as it goes. Nothing
+        // is drawn at rest (v == 1), so the idle icon costs nothing extra.
+        final r = Curves.easeOutCubic.transform(v);
+        final ring = v >= 1
+            ? null
+            : Container(
+                width: 26 * (0.7 + 0.9 * r),
+                height: 26 * (0.7 + 0.9 * r),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: widget.ink.withValues(alpha: 0.45 * (1 - r)),
+                    width: 2,
+                  ),
+                ),
+              );
+        return Stack(
           alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.003)
-            ..rotateX(2 * math.pi * t),
-          child: child,
+          clipBehavior: Clip.none,
+          children: [
+            ?ring,
+            Transform.scale(scale: scale, child: child),
+          ],
         );
       },
     );
