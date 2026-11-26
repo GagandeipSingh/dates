@@ -17,8 +17,10 @@ class Accent {
 // Coral, Ocean, Iris and Rose were toned to sit beside Mint, Sunset and
 // Graphite (owner, 2026-11-25: those three looked right, the rest too loud):
 // same hues, saturation brought from 76-89% to 55-65%, a touch deeper.
-// Graphite took a touch of blue (saturation 16% to 30%) the same day: a
-// near-grey accent read as ordinary grey text wherever it marked a choice.
+// Graphite took a touch of blue the same day, and read as a second Ocean
+// (owner, 2026-11-26). It is a neutral charcoal again; in dark mode it is
+// lifted to a bright silver, so a choice stands out by brightness, not hue
+// (Pal._readable, OnePalette.readablePrimary).
 const accents = <Accent>[
   Accent(
     'Coral',
@@ -118,18 +120,18 @@ const accents = <Accent>[
   ),
   Accent(
     'Graphite',
-    Color(0xFF4C6A90),
+    Color(0xFF474C54),
     [
-      Color(0xFFEDEFF3),
-      Color(0xFFDDE2EA),
-      Color(0xFFE6E3EE),
-      Color(0xFFDCE6EC),
+      Color(0xFFEFEFF1),
+      Color(0xFFE0E1E4),
+      Color(0xFFE8E7EA),
+      Color(0xFFE1E3E3),
     ],
     [
-      Color(0xFF0E1014),
-      Color(0xFF1A1E26),
-      Color(0xFF1C1A24),
-      Color(0xFF111A1E),
+      Color(0xFF0F0F11),
+      Color(0xFF1C1D20),
+      Color(0xFF1D1C20),
+      Color(0xFF141617),
     ],
   ),
 ];

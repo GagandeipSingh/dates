@@ -41,9 +41,25 @@ class Pal {
   /// A dark accent (Graphite) vanishes against the dark field; a very pale one
   /// would wash out on the light field. [_readable] lifts or deepens its
   /// lightness into a legible band for the current theme, so every accent keeps
-  /// its hue while staying visible. The hue and saturation are untouched, so
-  /// Coral still reads coral and Graphite still reads slate.
+  /// its hue while staying visible. The vivid accents are untouched; Graphite
+  /// becomes a bright silver in dark mode.
   late final Color accent = _readable(accentRaw, dark);
+
+  /// True for a near-grey accent (Graphite). A faint tint of it behind a
+  /// choice reads as no tint at all, so a choice is drawn solid instead.
+  late final bool _greyAccent =
+      HSLColor.fromColor(accentRaw).saturation < 0.35;
+
+  /// The fill and text of a selected chip. A coloured accent is a soft
+  /// tint with accent text; Graphite is solid (silver in dark, charcoal in
+  /// light) with contrasting text, or the choice did not stand out
+  /// (owner, 2026-11-26).
+  late final Color selFill = _greyAccent
+      ? accent
+      : accent.withValues(alpha: 0.16);
+  late final Color onSel = _greyAccent
+      ? (dark ? const Color(0xFF17171A) : Colors.white)
+      : accent;
 
   /// One UI's text and line colours (one_ui.dart).
   late final OnePalette one = OnePalette.forBrightness(
@@ -62,9 +78,10 @@ class Pal {
     // left exactly as shipped. We lift lightness only when there is little
     // colour to rely on.
     if (hsl.saturation < 0.35 && hsl.lightness < 0.62) {
-      // ...and a little colour with it, or the lifted accent is the same
-      // pale grey as secondary text (see OnePalette.readablePrimary).
-      return hsl.withLightness(0.70).withSaturation(0.45).toColor();
+      // Far brighter than secondary text (lightness ~0.61), so a choice
+      // still reads as one; no colour is added, or Graphite turns blue
+      // (see OnePalette.readablePrimary).
+      return hsl.withLightness(0.84).toColor();
     }
     return c;
   }

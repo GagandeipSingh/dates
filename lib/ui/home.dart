@@ -55,6 +55,7 @@ class _HomeShellState extends State<HomeShell> {
           ? GlassStatusBarStyle.light
           : GlassStatusBarStyle.dark,
       bottomBarHeight: DateDock.height,
+      bottomBarPaintsInset: true,
       // At launch the dock rises into place from below the screen on the
       // settle spring, once (its key never changes).
       bottomBar: SpringIn(

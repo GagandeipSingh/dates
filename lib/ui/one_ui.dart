@@ -179,11 +179,11 @@ class OnePalette {
     var hsl = HSLColor.fromColor(c);
     var changed = false;
     if (dark && hsl.lightness < 0.55) {
-      hsl = hsl.withLightness(0.66);
-      // A near-grey accent (Graphite) lifted alone turns the same pale grey
-      // as secondary text, so a selection stops reading as one: it keeps a
-      // little colour (owner, 2026-11-25).
-      if (hsl.saturation < 0.35) hsl = hsl.withSaturation(0.45);
+      // A near-grey accent (Graphite) lifted to 0.66 is the same pale grey
+      // as secondary text, so a selection stops reading as one. It goes to
+      // a bright silver instead; adding colour made it a second Ocean
+      // (owner, 2026-11-26).
+      hsl = hsl.withLightness(hsl.saturation < 0.35 ? 0.84 : 0.66);
       changed = true;
     }
     if (!dark && hsl.lightness > 0.62) {

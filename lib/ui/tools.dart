@@ -427,13 +427,13 @@ class _QuickAmount extends StatelessWidget {
             curve: kFade,
             padding: EdgeInsets.symmetric(horizontal: 12.dp, vertical: 7.dp),
             decoration: BoxDecoration(
-              color: on ? p.accent.withValues(alpha: 0.16) : p.faint,
+              color: on ? p.selFill : p.faint,
               borderRadius: BorderRadius.circular(10.dp),
             ),
             child: Text(
               label,
               style: TextStyle(
-                color: on ? p.accent : p.sub,
+                color: on ? p.onSel : p.sub,
                 fontSize: 13.sp,
                 fontWeight: FontWeight.w600,
               ),

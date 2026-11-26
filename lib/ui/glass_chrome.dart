@@ -3,12 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'glass_surface.dart';
 import 'motion.dart';
 import 'one_ui.dart';
 
 /// The app's chrome in One UI's flat material: the screen scaffold, the
-/// compact app bar, the bottom dialog and the strip behind the 3-button
+/// compact app bar, the bottom dialog and the floor behind the system
 /// navigation. The names are kept from the glass chrome they replaced, so
 /// no screen had to change its calls. Nothing here blurs or samples the
 /// screen: every bar is solid colour (One UI is fast on small processors
@@ -29,7 +28,13 @@ class GlassScaffold extends StatelessWidget {
     this.maxContentWidth,
     this.bottomBar,
     this.bottomBarHeight = 0,
+    this.bottomBarPaintsInset = false,
   });
+
+  /// True when [bottomBar] paints its own floor under the system navigation
+  /// (the home dock). A floating bar that does not (a tool screen's action
+  /// pills) still gets [NavButtonBacking] under it.
+  final bool bottomBarPaintsInset;
 
   /// A floating bar over the foot of the body (the tab bar). The body runs
   /// under it; screens pad for it themselves.
@@ -92,9 +97,9 @@ class GlassScaffold extends StatelessWidget {
             resizeToAvoidBottomInset: true,
             body: content,
           ),
-          // A bottom bar paints its own colour on under the system
-          // navigation; the strip is for screens without one.
-          if (bottomBar == null) const NavButtonBacking(),
+          // The home dock paints its own floor under the system navigation;
+          // every other screen gets the same floor here.
+          if (!bottomBarPaintsInset) const NavButtonBacking(),
         ],
       ),
     );
@@ -398,58 +403,25 @@ class _SheetStretchState extends State<_SheetStretch>
   }
 }
 
-/// Under 3-button navigation the back, home and recents buttons sit on their
-/// own strip of the app's liquid glass: the same floating lens as the tab bar
-/// ([GlassSurface], thick), square and full width. The page scrolls on under
-/// it, bent and frosted, so the buttons stay readable over any content.
-///
-/// Under GESTURE navigation there is no strip. The handle is a thin pill the
-/// system re-colours against what is behind it, and a 16-24 dp band of glass
-/// under it read as a stray ledge cut off the page; content runs to the edge
-/// there, as in native apps.
-///
-/// Told apart by the REAL inset in dp (the View's, not the tree's scaled
-/// MediaQuery): 3-button bars are 48 dp (42 on some phones), gesture bars
-/// 16-32 dp. Nothing in the app hides the buttons; they are always on screen.
+/// A solid floor of the page colour under the system navigation (the
+/// back/home/recents buttons, or the gesture handle), so content never
+/// scrolls under them. The same floor the home dock paints under its pills
+/// (owner's call, 2026-11-23, extended to every screen 2026-11-26), with
+/// nothing above the inset: the page runs right up to it.
 class NavButtonBacking extends StatelessWidget {
   const NavButtonBacking({super.key});
-
-  static const double threeButtonMinDp = 40;
-
-  static bool threeButton(BuildContext context) {
-    final view = View.of(context);
-    return view.viewPadding.bottom / view.devicePixelRatio >= threeButtonMinDp;
-  }
 
   @override
   Widget build(BuildContext context) {
     final h = MediaQuery.of(context).viewPadding.bottom;
-    if (h <= 0 || !threeButton(context)) return const SizedBox.shrink();
+    if (h <= 0) return const SizedBox.shrink();
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
       height: h,
       child: IgnorePointer(
-        // One hairline along the TOP edge, where the strip meets the page,
-        // and nothing along the bottom: the screen's own edge is there.
-        child: DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(
-                width: 0,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0x33FFFFFF)
-                    : const Color(0x1F000000),
-              ),
-            ),
-          ),
-          child: ColoredBox(
-            color: OnePalette.of(context).background,
-            child: const SizedBox.expand(),
-          ),
-        ),
+        child: ColoredBox(color: OnePalette.of(context).background),
       ),
     );
   }
